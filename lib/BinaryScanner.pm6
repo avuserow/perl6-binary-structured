@@ -31,12 +31,12 @@ use experimental :pack;
 # }
 
 my %readers;
-multi sub trait_mod:<is>(Attribute:D $a, :$read!) {
+multi sub trait_mod:<is>(Attribute:D $a, :$read!) is export {
 	%readers{$a} = $read;
 }
 
 my %indirect-type;
-multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) {
+multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) is export {
 	%indirect-type{$a} = $indirect-type;
 }
 
@@ -87,7 +87,7 @@ class Constructed {
 		}
 		my $inner = $inner-type.new($!data);
 		$inner.pos = $!pos;
-		# $inner.parent = self;
+		$inner.parent = self;
 		$inner.parse;
 		CATCH {
 			when X::Assignment {
@@ -117,15 +117,6 @@ class Constructed {
 		die "{self} has no attributes!" unless @attrs;
 		for @attrs -> $attr {
 			given $attr.type {
-				# note $attr;
-				when StaticData {
-					my $e = $attr.get_value(self);
-					my $g = self!pull($e.bytes);
-
-					if $g ne $e {
-						X::Constructed::StaticMismatch.new(got => $g, expected => $e).throw;
-					}
-				}
 				when Constructed {
 					my $inner-type = $attr.type;
 					my $inner = self!inline-parse($attr, $inner-type);
@@ -173,15 +164,60 @@ class Constructed {
 					my $len = %readers{$attr}(self);
 					$attr.set_value(self, self!pull($len));
 				}
+				when StaticData {
+					my $e = $attr.get_value(self);
+					my $g = self!pull($e.bytes);
+
+					if $g ne $e {
+						die X::Constructed::StaticMismatch.new(got => $g, expected => $e);
+					}
+				}
 				when AutoData {
 					my $len = %readers{$attr}(self);
 					$attr.set_value(self, self!pull($len));
 				}
 				default {
-					die "Cannot handle an attribute of type $_.gist() yet!";
+					die "Cannot read an attribute of type $_.gist() yet!";
 				}
 			}
 		}
+	}
+
+	method build() returns Blob {
+		my Buf $buf .= new;
+
+		my @attrs = self.^attributes(:local);
+		die "{self} has no attributes!" unless @attrs;
+		for @attrs -> $attr {
+			given $attr.type {
+				when uint8 {
+					$buf.push: $attr.get_value(self);
+				}
+				when int8 {
+					$buf.push: $attr.get_value(self);
+				}
+				when uint16 {
+					$buf.push: pack('n', $attr.get_value(self));
+				}
+				when int16 {
+					$buf.push: pack('n', $attr.get_value(self));
+				}
+				when uint32 {
+					$buf.push: pack('N', $attr.get_value(self));
+				}
+				when int32 {
+					$buf.push: pack('N', $attr.get_value(self));
+				}
+				when Buf | StaticData {
+					$buf.push: |$attr.get_value(self);
+				}
+				default {
+					die "Cannot write an attribute of type $_.gist() yet!";
+				}
+			}
+		}
+
+		return $buf;
 	}
 }
 
@@ -256,17 +292,9 @@ class Parameters is Constructed {
 	has Array[ParamGroup] $.groups;
 }
 
-#sub MAIN(IO() $file) {
-##	my $b = Parameters.new(Buf.new(
-##		0 xx 8, # static
-##		0x20, 0, 0, 0, 1, # begin group with one entry
-##		0x1, 0xa,
-##		0x6, 0, 0, 0, 0xa,
-##	));
-#
-#	my $data = $file.slurp(:bin);
-#
-#	my $b = Parameters.new($data);
-#	$b.parse;
-#	say $b;
-#}
+class AnyFile is Constructed {
+	has Buf $.stuff is read(method {
+		note "got here already? {self}";
+		return $.data.bytes;
+	});
+}
