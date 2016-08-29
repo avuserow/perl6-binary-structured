@@ -35,6 +35,11 @@ multi sub trait_mod:<is>(Attribute:D $a, :$read!) is export {
 	%readers{$a} = $read;
 }
 
+my %writers;
+multi sub trait_mod:<is>(Attribute:D $a, :$written!) is export {
+	%writers{$a} = $written;
+}
+
 my %indirect-type;
 multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) is export {
 	%indirect-type{$a} = $indirect-type;
@@ -112,6 +117,10 @@ class Constructed {
 		return $s ~ '}';
 	}
 
+	method !set-attr-value-rw($attr, $value) {
+		$attr.set_value(self, (my $ = $value));
+	}
+
 	method parse() {
 		my @attrs = self.^attributes(:local);
 		die "{self} has no attributes!" unless @attrs;
@@ -143,26 +152,27 @@ class Constructed {
 					$attr.set_value(self, @array);
 				}
 				when uint8 {
-					$attr.set_value(self, self!pull(1)[0]);
+					self!set-attr-value-rw($attr, self!pull(1)[0]);
 				}
 				when uint16 {
-					$attr.set_value(self, self!pull(2).unpack('S'));
+					self!set-attr-value-rw($attr, self!pull(2).unpack('S'));
 				}
 				when uint32 {
-					$attr.set_value(self, self!pull(4).unpack('L'));
+					self!set-attr-value-rw($attr, self!pull(4).unpack('L'));
 				}
 				when int8 {
-					$attr.set_value(self, self!pull(1)[0]);
+					self!set-attr-value-rw($attr, self!pull(1)[0]);
 				}
 				when int16 {
-					$attr.set_value(self, self!pull(2).unpack('n'));
+					self!set-attr-value-rw($attr, self!pull(2).unpack('n'));
 				}
 				when int32 {
-					$attr.set_value(self, self!pull(4).unpack('N'));
+					self!set-attr-value-rw($attr, self!pull(4).unpack('N'));
 				}
 				when Buf {
+					die "no reader for $attr.gist()" unless %readers{$attr}:exists;
 					my $len = %readers{$attr}(self);
-					$attr.set_value(self, self!pull($len));
+					self!set-attr-value-rw($attr, self!pull($len));
 				}
 				when StaticData {
 					my $e = $attr.get_value(self);
@@ -173,6 +183,7 @@ class Constructed {
 					}
 				}
 				when AutoData {
+					die "no reader for $attr.gist()" unless %readers{$attr}:exists;
 					my $len = %readers{$attr}(self);
 					$attr.set_value(self, self!pull($len));
 				}

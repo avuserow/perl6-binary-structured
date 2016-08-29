@@ -7,26 +7,22 @@ use lib 'lib';
 use BinaryScanner;
 
 class PascalString is Constructed {
-	has uint8 $.length;
-	has Buf $.value is read(method {$.length}) = Proxy.new(
-		FETCH => method {$!value},
-		STORE => method ($value) {
-			$!value = $value;
-			$.length = $value.bytes;
-		},
-	);
+	has uint8 $.length is readonly;
+	has Buf $!strdata is read(method {$!length});
+
+	method strdata {
+		return Proxy.new(
+			FETCH => sub ($) {return $!strdata},
+			STORE => sub ($, $v) {$!strdata = $v; $!length = $v.bytes;}
+		);
+	}
 }
 
 sub MAIN(IO() $file) {
-	my $buf = Buf.new(0x5, "hello world".ords);
-	my $b = PascalString.new($buf);
+	my $b = PascalString.new(Buf.new(0x5, "hello".ords));
 	$b.parse;
+	$b.strdata = Buf.new("hello world".ords);
+	say $b;
 	say $b.build;
-
-#	my $data = $file.slurp(:bin);
-#
-#	my $b = Parameters.new($data);
-#	$b.parse;
-#	say $b;
 }
 
