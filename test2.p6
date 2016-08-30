@@ -18,10 +18,25 @@ class PascalString is Constructed {
 	}
 }
 
+class MultiPascalString is Constructed {
+	has StaticData $.header = Buf.new: "MStr".ords;
+	has uint8 $.elems is readonly;
+	has Array[PascalString] $!strs;
+
+	method strs {
+		return Proxy.new(
+			FETCH => sub ($) {return $!strs},
+			STORE => sub ($, $v) {$!strs = $v; $!elems = $v.elems;}
+		);
+	}
+}
+
 sub MAIN(IO() $file) {
-	my $b = PascalString.new(Buf.new(0x5, "hello".ords));
+	my $i = PascalString.new(Buf.new(0x5, "hello".ords));
+	$i.parse;
+	my $b = MultiPascalString.new(Buf.new("MStr".ords, 0));
 	$b.parse;
-	$b.strdata = Buf.new("hello world".ords);
+	$b.strs.push: $i;
 	say $b;
 	say $b.build;
 }

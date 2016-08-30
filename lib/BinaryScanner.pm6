@@ -3,44 +3,17 @@ use v6.c;
 
 use experimental :pack;
 
-# sub bytes-to-int($value) {
-# 	$value.encode('latin-1').unpack('N');
-# }
-# 
-# grammar ParamFile {
-# 	token TOP {
-# 		<preamble>
-# 
-# 		(\x20 (. ** 4) (<data>)+)+
-# 	}
-# 
-# 	token preamble {
-# 		. ** 8
-# 	}
-# 
-# 	token data {
-# 		| \x01 (.)
-# 		| \x02 (.)
-# 		| \x03 (. ** 2)
-# 		| \x04 (. ** 2)
-# 		| \x05 (. ** 4)
-# 		| \x06 (. ** 4)
-# 		| \x07 (. ** 4)
-# 		| \x08 (. ** 4) (. ** {bytes-to-int(~$0)})
-# 	}
-# }
-
-my %readers;
+my %readers := :{};
 multi sub trait_mod:<is>(Attribute:D $a, :$read!) is export {
 	%readers{$a} = $read;
 }
 
-my %writers;
+my %writers := :{};
 multi sub trait_mod:<is>(Attribute:D $a, :$written!) is export {
 	%writers{$a} = $written;
 }
 
-my %indirect-type;
+my %indirect-type := :{};
 multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) is export {
 	%indirect-type{$a} = $indirect-type;
 }
@@ -62,15 +35,6 @@ class Constructed {
 	has Blob $.data;
 	has Constructed $.parent is rw;
 
-	method new(Blob $data) {
-		self.bless(:$data);
-	}
-
-	submethod BUILD(:$data) {
-		# Hmm. Interesting.
-		$!data = $data;
-	}
-
 	method peek-one {
 		return $!data[$!pos];
 	}
@@ -80,7 +44,7 @@ class Constructed {
 		return $subbuf;
 	}
 
-	method !pull(Int $count) {
+	method pull(Int $count) {
 		my $subbuf = $!data.subbuf($!pos, $count);
 		$!pos += $count;
 		return $subbuf;
@@ -90,9 +54,7 @@ class Constructed {
 		if %indirect-type{$attr}:exists {
 			$inner-type = %indirect-type{$attr}(self);
 		}
-		my $inner = $inner-type.new($!data);
-		$inner.pos = $!pos;
-		$inner.parent = self;
+		my $inner = $inner-type.new(:$!data, $!pos, :parent(self));
 		$inner.parse;
 		CATCH {
 			when X::Assignment {
@@ -117,11 +79,15 @@ class Constructed {
 		return $s ~ '}';
 	}
 
+	# Since Attribute.set_value apparently binds, we need to give it a
+	# container. Handle that icky step here.
 	method !set-attr-value-rw($attr, $value) {
 		$attr.set_value(self, (my $ = $value));
 	}
 
-	method parse() {
+	method parse(Blob $data) {
+		$!data = $data;
+
 		my @attrs = self.^attributes(:local);
 		die "{self} has no attributes!" unless @attrs;
 		for @attrs -> $attr {
@@ -152,40 +118,41 @@ class Constructed {
 					$attr.set_value(self, @array);
 				}
 				when uint8 {
-					self!set-attr-value-rw($attr, self!pull(1)[0]);
+					self!set-attr-value-rw($attr, self.pull(1)[0]);
 				}
 				when uint16 {
-					self!set-attr-value-rw($attr, self!pull(2).unpack('S'));
+					self!set-attr-value-rw($attr, self.pull(2).unpack('S'));
 				}
 				when uint32 {
-					self!set-attr-value-rw($attr, self!pull(4).unpack('L'));
+					self!set-attr-value-rw($attr, self.pull(4).unpack('L'));
 				}
 				when int8 {
-					self!set-attr-value-rw($attr, self!pull(1)[0]);
+					self!set-attr-value-rw($attr, self.pull(1)[0]);
 				}
 				when int16 {
-					self!set-attr-value-rw($attr, self!pull(2).unpack('n'));
+					self!set-attr-value-rw($attr, self.pull(2).unpack('n'));
 				}
 				when int32 {
-					self!set-attr-value-rw($attr, self!pull(4).unpack('N'));
+					self!set-attr-value-rw($attr, self.pull(4).unpack('N'));
 				}
 				when Buf {
 					die "no reader for $attr.gist()" unless %readers{$attr}:exists;
-					my $len = %readers{$attr}(self);
-					self!set-attr-value-rw($attr, self!pull($len));
+					my $data = %readers{$attr}(self);
+					self!set-attr-value-rw($attr, $data);
 				}
 				when StaticData {
 					my $e = $attr.get_value(self);
-					my $g = self!pull($e.bytes);
+					my $g = self.pull($e.bytes);
 
 					if $g ne $e {
 						die X::Constructed::StaticMismatch.new(got => $g, expected => $e);
 					}
 				}
 				when AutoData {
+					# XXX: factor into Buf above?
 					die "no reader for $attr.gist()" unless %readers{$attr}:exists;
-					my $len = %readers{$attr}(self);
-					$attr.set_value(self, self!pull($len));
+					my $data = %readers{$attr}(self);
+					self!set-attr-value-rw($attr, $data);
 				}
 				default {
 					die "Cannot read an attribute of type $_.gist() yet!";
@@ -204,23 +171,28 @@ class Constructed {
 				when uint8 {
 					$buf.push: $attr.get_value(self);
 				}
-				when int8 {
-					$buf.push: $attr.get_value(self);
-				}
 				when uint16 {
-					$buf.push: pack('n', $attr.get_value(self));
-				}
-				when int16 {
 					$buf.push: pack('n', $attr.get_value(self));
 				}
 				when uint32 {
 					$buf.push: pack('N', $attr.get_value(self));
+				}
+				when int8 {
+					$buf.push: $attr.get_value(self);
+				}
+				when int16 {
+					$buf.push: pack('n', $attr.get_value(self));
 				}
 				when int32 {
 					$buf.push: pack('N', $attr.get_value(self));
 				}
 				when Buf | StaticData {
 					$buf.push: |$attr.get_value(self);
+				}
+				when Array | Constructed {
+					note "nested data type on write: $attr.gist()";
+					my $inner = $attr.get_value(self);
+					$buf.push: .build for $inner.list;
 				}
 				default {
 					die "Cannot write an attribute of type $_.gist() yet!";
