@@ -6,8 +6,7 @@ class CString is Constructed {
 		my $c = Buf.new;
 		$c ~= self.pull(1) while self.peek-one != 0;
 		return $c;
-	});
+	}) is rw;
 
 	has StaticData $.terminator = Buf.new: 0;
 }
-

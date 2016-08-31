@@ -127,19 +127,21 @@ class Constructed {
 					self!set-attr-value-rw($attr, self.pull(1)[0]);
 				}
 				when uint16 {
-					self!set-attr-value-rw($attr, self.pull(2).unpack('S'));
+					# manual cast to uint16 is needed to handle bounds
+					self!set-attr-value-rw($attr, (my uint16 $ = self.pull(2).unpack('v')));
 				}
 				when uint32 {
-					self!set-attr-value-rw($attr, self.pull(4).unpack('L'));
+					# manual cast to uint32 is needed to handle bounds
+					self!set-attr-value-rw($attr, (my uint32 $ = self.pull(4).unpack('V')));
 				}
 				when int8 {
 					self!set-attr-value-rw($attr, self.pull(1)[0]);
 				}
 				when int16 {
-					self!set-attr-value-rw($attr, self.pull(2).unpack('n'));
+					self!set-attr-value-rw($attr, self.pull(2).unpack('v'));
 				}
 				when int32 {
-					self!set-attr-value-rw($attr, self.pull(4).unpack('N'));
+					self!set-attr-value-rw($attr, self.pull(4).unpack('V'));
 				}
 				when Buf {
 					die "no reader for $attr.gist()" unless $attr.reader;
@@ -167,6 +169,13 @@ class Constructed {
 		}
 	}
 
+	method !get-attr-value($attr) {
+		if $attr ~~ ConstructedAttributeHelper && $attr.writer {
+			return $attr.writer.(self);
+		}
+		return $attr.get_value(self);
+	}
+
 	method build() returns Blob {
 		my Buf $buf .= new;
 
@@ -175,29 +184,29 @@ class Constructed {
 		for @attrs -> $attr {
 			given $attr.type {
 				when uint8 {
-					$buf.push: $attr.get_value(self);
+					$buf.push: self!get-attr-value($attr);
 				}
 				when uint16 {
-					$buf.push: pack('n', $attr.get_value(self));
+					$buf.push: pack('v', self!get-attr-value($attr));
 				}
 				when uint32 {
-					$buf.push: pack('N', $attr.get_value(self));
+					$buf.push: pack('V', self!get-attr-value($attr));
 				}
 				when int8 {
-					$buf.push: $attr.get_value(self);
+					$buf.push: self!get-attr-value($attr);
 				}
 				when int16 {
-					$buf.push: pack('n', $attr.get_value(self));
+					$buf.push: pack('v', self!get-attr-value($attr));
 				}
 				when int32 {
-					$buf.push: pack('N', $attr.get_value(self));
+					$buf.push: pack('V', self!get-attr-value($attr));
 				}
 				when Buf | StaticData {
-					$buf.push: |$attr.get_value(self);
+					$buf.push: |self!get-attr-value($attr);
 				}
 				when Array | Constructed {
 					note "nested data type on write: $attr.gist()";
-					my $inner = $attr.get_value(self);
+					my $inner = self!get-attr-value($attr);
 					$buf.push: .build for $inner.list;
 				}
 				default {
