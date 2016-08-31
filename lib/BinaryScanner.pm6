@@ -3,19 +3,25 @@ use v6.c;
 
 use experimental :pack;
 
-my %readers := :{};
+my role ConstructedAttributeHelper {
+	has Routine $.reader is rw;
+	has Routine $.writer is rw;
+	has Routine $.indirect-type is rw;
+}
+
 multi sub trait_mod:<is>(Attribute:D $a, :$read!) is export {
-	%readers{$a} = $read;
+	$a does ConstructedAttributeHelper;
+	$a.reader = $read;
 }
 
-my %writers := :{};
 multi sub trait_mod:<is>(Attribute:D $a, :$written!) is export {
-	%writers{$a} = $written;
+	$a does ConstructedAttributeHelper;
+	$a.writer = $written;
 }
 
-my %indirect-type := :{};
 multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) is export {
-	%indirect-type{$a} = $indirect-type;
+	$a does ConstructedAttributeHelper;
+	$a.indirect-type = $indirect-type;
 }
 
 subset StaticData of Blob;
@@ -51,9 +57,9 @@ class Constructed {
 	}
 
 	method !inline-parse($attr, $inner-type is copy) {
-		if %indirect-type{$attr}:exists {
-			$inner-type = %indirect-type{$attr}(self);
-		}
+#		if %indirect-type{$attr}:exists {
+#			$inner-type = %indirect-type{$attr}(self);
+#		}
 		my $inner = $inner-type.new(:$!data, $!pos, :parent(self));
 		$inner.parse;
 		CATCH {
@@ -136,8 +142,8 @@ class Constructed {
 					self!set-attr-value-rw($attr, self.pull(4).unpack('N'));
 				}
 				when Buf {
-					die "no reader for $attr.gist()" unless %readers{$attr}:exists;
-					my $data = %readers{$attr}(self);
+					die "no reader for $attr.gist()" unless $attr.reader;
+					my $data = $attr.reader.(self);
 					self!set-attr-value-rw($attr, $data);
 				}
 				when StaticData {
@@ -150,8 +156,8 @@ class Constructed {
 				}
 				when AutoData {
 					# XXX: factor into Buf above?
-					die "no reader for $attr.gist()" unless %readers{$attr}:exists;
-					my $data = %readers{$attr}(self);
+					die "no reader for $attr.gist()" unless $attr.reader;
+					my $data = $attr.reader.(self);
 					self!set-attr-value-rw($attr, $data);
 				}
 				default {

@@ -1,15 +1,12 @@
 use v6;
-use lib 'lib';
+use lib 'lib', 't/lib';
 
 use Test;
 
 use BinaryScanner;
 
 subtest 'pascal string', {
-	my class PascalString is Constructed {
-		has uint8 $.length;
-		has Buf $.string is read(method {self.pull($.length)});
-	}
+	use PascalString;
 
 	subtest 'zero length', {
 		my $buf = Buf.new: 0;
@@ -48,16 +45,7 @@ subtest 'pascal string', {
 };
 
 subtest 'cstring', {
-	my class CString is Constructed {
-		has Buf $.string is read(method {
-			# TODO: read more efficiently
-			my $c = Buf.new;
-			$c ~= self.pull(1) while self.peek-one != 0;
-			return $c;
-		});
-
-		has StaticData $.terminator = Buf.new: 0;
-	}
+	use CString;
 
 	subtest 'zero length', {
 		my $buf = Buf.new: 0;
