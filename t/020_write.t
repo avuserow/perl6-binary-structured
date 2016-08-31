@@ -42,4 +42,40 @@ subtest 'cstring', {
 	};
 };
 
+subtest 'numeric data', {
+	use NumericData;
+
+	subtest 'basic', {
+		my $buf = Buf.new: 1 .. 14;
+		my $parser = NumericData.new;
+
+		# NOTE: little endian assumed by default
+		$parser.a = 0x01;
+		$parser.b = 0x0302;
+		$parser.c = 0x07060504;
+		$parser.d = 0x08;
+		$parser.e = 0x0a09;
+		$parser.f = 0x0e0d0c0b;
+
+		my $res = $parser.build;
+		is $res, $buf;
+	};
+
+	subtest 'overflow', {
+		my $buf = Buf.new: 1 .. 14;
+		my $parser = NumericData.new;
+
+		# NOTE: little endian assumed by default
+		$parser.a = 0xf01;
+		$parser.b = 0xf0302;
+		$parser.c = 0xf07060504;
+		$parser.d = 0xf08;
+		$parser.e = 0xf0a09;
+		$parser.f = 0xf0e0d0c0b;
+
+		my $res = $parser.build;
+		is $res, $buf;
+	};
+};
+
 done-testing;
