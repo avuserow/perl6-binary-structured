@@ -228,7 +228,6 @@ class Constructed {
 					$buf.push: |self!get-attr-value($attr);
 				}
 				when Array | Constructed {
-					note "nested data type on write: $attr.gist()";
 					my $inner = self!get-attr-value($attr);
 					$buf.push: .build for $inner.list;
 				}
