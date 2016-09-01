@@ -1,6 +1,27 @@
 use v6;
 use v6.c;
 
+=begin pod
+
+=head1 NAME
+
+BinaryScanner - read and write binary formats with class definitions
+
+=head1 SYNOPSIS
+
+	use BinaryScanner;
+
+	class PascalString is Constructed {
+		has uint8 $!length is written(method {$!string.bytes});
+		has Buf $.string is read(method {self.pull($!length)}) is rw;
+	}
+
+	my $parser = PascalString.new;
+	$parser.parse(Buf.new("\x05hello world".ords));
+	say $parser.string; # "hello"
+
+=end pod
+
 use experimental :pack;
 
 my role ConstructedAttributeHelper {
