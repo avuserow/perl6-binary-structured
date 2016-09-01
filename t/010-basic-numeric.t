@@ -28,6 +28,20 @@ subtest 'basic parse', {
 	is $parser.f, 0x0e0d0c0b, 'int32';
 };
 
+subtest 'parse with unsigned', {
+	my $buf = Buf.new: 0xff xx 14;
+	my $parser = NumericData.new;
+	$parser.parse($buf);
+
+	# NOTE: little endian assumed by default
+	is $parser.a, 0xff, 'uint8';
+	is $parser.b, 0xffff, 'uint16';
+	is $parser.c, 0xffffffff, 'uint32';
+	is $parser.d, -1, 'int8';
+	is $parser.e, -1, 'int16';
+	is $parser.f, -1, 'int32';
+};
+
 subtest 'basic write', {
 	my $buf = Buf.new: 1 .. 14;
 	my $parser = NumericData.new;

@@ -45,8 +45,11 @@ multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) is export {
 	$a.indirect-type = $indirect-type;
 }
 
+# XXX: maybe these should be subclasses
 subset StaticData of Blob;
 subset AutoData of Any;
+
+class ElementCount is Int {}
 
 class X::Constructed::StaticMismatch is Exception {
 	has $.got;
@@ -75,6 +78,12 @@ class Constructed {
 		my $subbuf = $!data.subbuf($!pos, $count);
 		$!pos += $count;
 		return $subbuf;
+	}
+
+	#= Helper method for reader methods to indicate a certain number of
+	# elements rather than a certain number of bytes
+	method pull-elements(Int $count) returns ElementCount {
+		return ElementCount.new($count);
 	}
 
 	method !inline-parse($attr, $inner-type is copy) {
@@ -128,26 +137,48 @@ class Constructed {
 
 					$attr.set_value(self, $inner);
 				}
+
 				when Array {
-					if $attr.type.of !~~ Constructed {
+					unless $attr.type.of ~~ Constructed {
 						die "whoa, can't handle a $attr.type.gist() yet :(";
 					}
+					die "no reader for $attr.gist()" unless $attr.reader;
+					my $limit = $attr.reader.(self);
+					my $limit-type = 'bytes';
+					if $limit ~~ Buf {
+						die "XXX: Bufs for readers for arrays NYI";
+					}
+
 					my @array = $attr.type.new;
 
 					# This attr must know when to stop somehow...
 					my $inner-type = $attr.type.of;
-					while True {
-						# prevent out of bounds...
-						last if $!pos >= $!data.bytes;
-						my $inner = self!inline-parse($attr, $inner-type);
-						last unless $inner;
-						@array.push($inner);
+
+					if $limit ~~ ElementCount {
+						for ^$limit {
+							# prevent out of bounds...
+							die "$attr.gist(): read past end of buffer!" if $!pos >= $!data.bytes;
+							my $inner = self!inline-parse($attr, $inner-type);
+							@array.push($inner);
+						}
+					} else {
+						my $initial-pos = $!pos;
+						while $!pos - $initial-pos < $limit {
+							die "$attr.gist(): read past end of buffer!" if $!pos >= $!data.bytes;
+							my $inner = self!inline-parse($attr, $inner-type);
+							@array.push($inner);
+						}
+
+						# XXX: maybe this should be a warning
+						die "$attr.gist(): read too many bytes!" if $limit < $!pos - $initial-pos;
 					}
 
 					$attr.set_value(self, @array);
 				}
+
 				when uint8 {
-					self!set-attr-value-rw($attr, self.pull(1)[0]);
+					# manual cast to uint8 is needed to handle bounds
+					self!set-attr-value-rw($attr, (my uint8 $ = self.pull(1)[0]));
 				}
 				when uint16 {
 					# manual cast to uint16 is needed to handle bounds
@@ -166,11 +197,13 @@ class Constructed {
 				when int32 {
 					self!set-attr-value-rw($attr, self.pull(4).unpack('V'));
 				}
+
 				when Buf {
 					die "no reader for $attr.gist()" unless $attr.reader;
 					my $data = $attr.reader.(self);
 					self!set-attr-value-rw($attr, $data);
 				}
+
 				when StaticData {
 					my $e = $attr.get_value(self);
 					my $g = self.pull($e.bytes);
@@ -179,12 +212,14 @@ class Constructed {
 						die X::Constructed::StaticMismatch.new(got => $g, expected => $e);
 					}
 				}
+
 				when AutoData {
 					# XXX: factor into Buf above?
 					die "no reader for $attr.gist()" unless $attr.reader;
 					my $data = $attr.reader.(self);
 					self!set-attr-value-rw($attr, $data);
 				}
+
 				default {
 					die "Cannot read an attribute of type $_.gist() yet!";
 				}
