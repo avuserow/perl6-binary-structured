@@ -81,8 +81,8 @@ class Constructed {
 #		if %indirect-type{$attr}:exists {
 #			$inner-type = %indirect-type{$attr}(self);
 #		}
-		my $inner = $inner-type.new(:$!data, $!pos, :parent(self));
-		$inner.parse;
+		my $inner = $inner-type.new;
+		$inner.parse($!data, :$!pos, :parent(self));
 		CATCH {
 			when X::Assignment {
 				note "LAST1";
@@ -112,8 +112,10 @@ class Constructed {
 		$attr.set_value(self, (my $ = $value));
 	}
 
-	method parse(Blob $data) {
+	method parse(Blob $data, Int :$pos=0, Constructed :$parent) {
 		$!data = $data;
+		$!pos = $pos;
+		$!parent = $parent;
 
 		my @attrs = self.^attributes(:local);
 		die "{self} has no attributes!" unless @attrs;
