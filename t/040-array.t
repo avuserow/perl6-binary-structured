@@ -13,7 +13,7 @@ class InnerStruct is Binary::Structured {
 class OuterStruct is Binary::Structured {
 	has uint8 $.count is rw;
 
-	has Array[InnerStruct] $.items is read(method {self.pull-elements($!count)}) is rw;
+	has Array[InnerStruct] $.items is read(method {self.pull-elements($!count)}) is rw = Array[InnerStruct].new;
 
 	has uint8 $.after is rw;
 }

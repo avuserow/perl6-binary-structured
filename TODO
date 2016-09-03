@@ -4,6 +4,7 @@ v0.0.1:
 - document everything
 
 - port tests from Python's construct (construct/construct/protocols/application and construct/tests) and P5's Data::ParseBinary
+- remove requirement to Array[Inner].new for arrays
 - polish up `indirect-type` and/or add alternatives?
 - polish up trait naming and return values
 - endianness!
