@@ -33,8 +33,12 @@ say $parser.build; # Buf.new<0d 6f 6d 65 20 6e 65 77 20 64 61 74 61>
 =head1 DESCRIPTION
 
 Binary::Structured provides a way to define classes which know how to parse and
-emit binary data based on the class attributes. Objects can be created from
-scratch or from a Buf, and then the objects can be serialized back to Bufs.
+emit binary data based on the class attributes. The goal of this module is to
+provide building blocks to describe an entire file (or well-defined section of
+a file), which can easily be parsed, edited, and rebuilt.
+
+This module was inspired by the Python library C<construct>, with the
+class-based representation inspired by Perl 6's C<NativeCall>. 
 
 Types of the attributes are used whenever possible to drive behavior, with
 custom traits provided to add more smarts when needed to parse more formats.
@@ -45,7 +49,8 @@ readonly or rw traits are ignored for attributes. Methods are also ignored.
 
 =head1 TYPES
 
-The following native attributes may be used without any traits:
+Perl 6 provides a wealth of native sized types. The following native types may
+be used on attributes for parsing and building without the help of any traits:
 
 =item int8
 =item int16
@@ -414,75 +419,16 @@ lengths and some checksums. Since C<build> is only called when all attributes
 are filled, you can refer to attributes that have not been written (unlike C<is
 read>).
 
+=head1 REQUIREMENTS
+
+=item Rakudo Perl v6.c or above (tested on 2016.08.1)
+
+=head1 TODO
+
+See L<TODO>.
+
+=head1 SEE ALSO
+
+=item The PackUnpack module
+
 =end pod
-
-class ParamValue is Constructed {}
-
-class ParamValueUint8 is ParamValue {
-	has StaticData $.type = Buf.new(0x1);
-	has uint8 $.value;
-}
-
-class ParamValueInt8 is ParamValue {
-	has StaticData $.type = Buf.new(0x2);
-	has int8 $.value;
-}
-
-class ParamValueUint16 is ParamValue {
-	has StaticData $.type = Buf.new(0x3);
-	has uint16 $.value;
-}
-
-class ParamValueInt16 is ParamValue {
-	has StaticData $.type = Buf.new(0x4);
-	has int16 $.value;
-}
-
-class ParamValueUint32 is ParamValue {
-	has StaticData $.type = Buf.new(0x5);
-	has uint32 $.value;
-}
-
-class ParamValueInt32 is ParamValue {
-	has StaticData $.type = Buf.new(0x6);
-	has int32 $.value;
-}
-
-class ParamValueFloat32 is ParamValue {
-	has StaticData $.type = Buf.new(0x7);
-	has Buf $.value is read(method {4});
-}
-
-class ParamValueStr is ParamValue {
-	has StaticData $.type = Buf.new(0x8);
-	has uint32 $.length;
-	has Buf $.value is read(method {$.length});
-}
-
-my %TAG_MAPPING := :{
-	0x1 => ParamValueUint8,
-	0x2 => ParamValueInt8,
-	0x3 => ParamValueUint16,
-	0x4 => ParamValueInt16,
-	0x5 => ParamValueUint32,
-	0x6 => ParamValueInt32,
-	0x7 => ParamValueFloat32,
-	0x8 => ParamValueStr,
-};
-
-class ParamGroup is Constructed {
-	has StaticData $.type = Buf.new(0x20);
-	has uint32 $.entries;
-
-	has Array[ParamValue] $.values is indirect-type(method {
-		my $peek = self.peek-one;
-		die "Value $peek not a known type tag!" unless %TAG_MAPPING{$peek}:exists;
-		return %TAG_MAPPING{$peek};
-	});
-}
-
-class Parameters is Constructed {
-	has StaticData $.static = Buf.new(0xff, 0xff, 0 xx 6);
-
-	has Array[ParamGroup] $.groups;
-}
