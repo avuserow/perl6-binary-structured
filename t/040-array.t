@@ -3,14 +3,14 @@ use lib 'lib';
 
 use Test;
 
-use BinaryScanner;
+use Binary::Structured;
 
-class InnerStruct is Constructed {
+class InnerStruct is Binary::Structured {
 	has uint8 $.a is rw;
 	has uint8 $.b is rw;
 }
 
-class OuterStruct is Constructed {
+class OuterStruct is Binary::Structured {
 	has uint8 $.count is rw;
 
 	has Array[InnerStruct] $.items is read(method {self.pull-elements($!count)}) is rw;
@@ -53,17 +53,42 @@ subtest 'basic parse (count = 2)', {
 	is $parser.after, 100;
 };
 
-#subtest 'basic build', {
-#	my $parser = OuterStruct.new;
-#	$parser.inner .= new;
-#
-#	$parser.before = 1;
-#	$parser.inner.a = 2;
-#	$parser.inner.b = 3;
-#	$parser.after = 4;
-#
-#	my $res = $parser.build;
-#	is $res, Buf.new(1, 2, 3, 4);
-#};
+subtest 'basic build (count = 0)', {
+	my $parser = OuterStruct.new;
+	$parser.count = 0;
+	$parser.after = 4;
+
+	my $res = $parser.build;
+	is $res, Buf.new(0, 4);
+};
+
+subtest 'basic build (count = 1)', {
+	my $parser = OuterStruct.new;
+	$parser.items.push(InnerStruct.new);
+
+	$parser.count = 1;
+	$parser.items[0].a = 2;
+	$parser.items[0].b = 3;
+	$parser.after = 4;
+
+	my $res = $parser.build;
+	is $res, Buf.new(1, 2, 3, 4);
+};
+
+subtest 'basic build (count = 2)', {
+	my $parser = OuterStruct.new;
+	$parser.items.push(InnerStruct.new);
+	$parser.items.push(InnerStruct.new);
+
+	$parser.count = 2;
+	$parser.items[0].a = 2;
+	$parser.items[0].b = 3;
+	$parser.items[1].a = 4;
+	$parser.items[1].b = 5;
+	$parser.after = 6;
+
+	my $res = $parser.build;
+	is $res, Buf.new(2, 2 .. 6);
+};
 
 done-testing;

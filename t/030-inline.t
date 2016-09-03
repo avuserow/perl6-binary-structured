@@ -3,14 +3,14 @@ use lib 'lib';
 
 use Test;
 
-use BinaryScanner;
+use Binary::Structured;
 
-class InnerStruct is Constructed {
+class InnerStruct is Binary::Structured {
 	has int8 $.a is rw;
 	has int8 $.b is rw;
 }
 
-class OuterStruct is Constructed {
+class OuterStruct is Binary::Structured {
 	has int8 $.before is rw;
 
 	has InnerStruct $.inner is rw;

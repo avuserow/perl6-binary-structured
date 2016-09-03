@@ -38,7 +38,7 @@ provide building blocks to describe an entire file (or well-defined section of
 a file), which can easily be parsed, edited, and rebuilt.
 
 This module was inspired by the Python library C<construct>, with the
-class-based representation inspired by Perl 6's C<NativeCall>. 
+class-based representation inspired by Perl 6's C<NativeCall>.
 
 Types of the attributes are used whenever possible to drive behavior, with
 custom traits provided to add more smarts when needed to parse more formats.
@@ -141,7 +141,7 @@ my class ElementCount is Int {}
 
 #| Exception raised when data in a C<StaticData> does not match the bytes
 #| consumed.
-class X::Constructed::StaticMismatch is Exception {
+class X::Binary::Structured::StaticMismatch is Exception {
 	has $.got;
 	has $.expected;
 
@@ -152,12 +152,12 @@ class X::Constructed::StaticMismatch is Exception {
 
 #| Superclass of formats. Some methods are meant for implementing various trait
 #| helpers (see below).
-class Constructed {
+class Binary::Structured {
 	#| Current position of parsing of the Buf.
 	has Int $.pos is readonly = 0;
 	#| Data being parsed.
 	has Blob $.data is readonly;
-	has Constructed $!parent;
+	has Binary::Structured $!parent;
 
 	#| Returns a Buf of the next C<$count> bytes but without advancing the
 	#| position, used for lookahead in the C<is read> trait.
@@ -198,7 +198,7 @@ class Constructed {
 				note "LAST1";
 				return;
 			}
-			when X::Constructed::StaticMismatch {
+			when X::Binary::Structured::StaticMismatch {
 				note "LAST2";
 				return;
 			}
@@ -227,7 +227,7 @@ class Constructed {
 	#| at, and a parent C<Binary::Structured> object (purely for subsequent
 	#| parsing methods for traits). Typically only with C<$data> and maybe
 	#| C<$pos>.
-	method parse(Blob $data, Int :$pos=0, Constructed :$parent) {
+	method parse(Blob $data, Int :$pos=0, Binary::Structured :$parent) {
 		$!data = $data;
 		$!pos = $pos;
 		$!parent = $parent;
@@ -236,7 +236,7 @@ class Constructed {
 		die "{self} has no attributes!" unless @attrs;
 		for @attrs -> $attr {
 			given $attr.type {
-				when Constructed {
+				when Binary::Structured {
 					my $inner-type = $attr.type;
 					my $inner = self!inline-parse($attr, $inner-type);
 					die "Mismatch!" unless $inner;
@@ -245,7 +245,7 @@ class Constructed {
 				}
 
 				when Array {
-					unless $attr.type.of ~~ Constructed {
+					unless $attr.type.of ~~ Binary::Structured {
 						die "whoa, can't handle a $attr.type.gist() yet :(";
 					}
 					die "no reader for $attr.gist()" unless $attr.reader;
@@ -321,7 +321,7 @@ class Constructed {
 					my $g = self.pull($e.bytes);
 
 					if $g ne $e {
-						die X::Constructed::StaticMismatch.new(got => $g, expected => $e);
+						die X::Binary::Structured::StaticMismatch.new(got => $g, expected => $e);
 					}
 				}
 
@@ -375,7 +375,7 @@ class Constructed {
 				when Buf | StaticData {
 					$buf.push: |self!get-attr-value($attr);
 				}
-				when Array | Constructed {
+				when Array | Binary::Structured {
 					my $inner = self!get-attr-value($attr);
 					$buf.push: .build for $inner.list;
 				}

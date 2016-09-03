@@ -3,9 +3,9 @@ use lib 'lib';
 
 use Test;
 
-use BinaryScanner;
+use Binary::Structured;
 
-class NumericData is Constructed {
+class NumericData is Binary::Structured {
 	has uint8 $.a is rw;
 	has uint16 $.b is rw;
 	has uint32 $.c is rw;

@@ -3,9 +3,9 @@ use lib 'lib';
 
 use Test;
 
-use BinaryScanner;
+use Binary::Structured;
 
-class PascalString is Constructed {
+class PascalString is Binary::Structured {
 	has uint8 $.length is written(method {$.string.bytes});
 	has Buf $.string is read(method {self.pull($.length)}) is rw;
 }

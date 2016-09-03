@@ -3,9 +3,9 @@ use lib 'lib', 't/lib';
 
 use Test;
 
-use BinaryScanner;
+use Binary::Structured;
 
-class CString is Constructed {
+class CString is Binary::Structured {
 	has Buf $.string is read(method {
 		# TODO: read more efficiently
 		my $c = Buf.new;
