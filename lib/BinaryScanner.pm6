@@ -5,20 +5,103 @@ use v6.c;
 
 =head1 NAME
 
-BinaryScanner - read and write binary formats with class definitions
+Binary::Structured - read and write binary formats defined by classes
 
 =head1 SYNOPSIS
 
-	use BinaryScanner;
+=begin code
 
-	class PascalString is Constructed {
-		has uint8 $!length is written(method {$!string.bytes});
-		has Buf $.string is read(method {self.pull($!length)}) is rw;
-	}
+use Binary::Structured;
 
-	my $parser = PascalString.new;
-	$parser.parse(Buf.new("\x05hello world".ords));
-	say $parser.string; # "hello"
+# Binary format definition
+class PascalString is Binary::Structured {
+	has uint8 $!length is written(method {$!string.bytes});
+	has Buf $.string is read(method {self.pull($!length)}) is rw;
+}
+
+# Reading
+my $parser = PascalString.new;
+$parser.parse(Buf.new("\x05hello world".ords));
+say $parser.string.decode("ascii"); # "hello"
+
+# Writing
+$parser.string = "some new data".ords;
+say $parser.build; # Buf.new<0d 6f 6d 65 20 6e 65 77 20 64 61 74 61>
+
+=end code
+
+=head1 DESCRIPTION
+
+Binary::Structured provides a way to define classes which know how to parse and
+emit binary data based on the class attributes. Objects can be created from
+scratch or from a Buf, and then the objects can be serialized back to Bufs.
+
+Types of the attributes are used whenever possible to drive behavior, with
+custom traits provided to add more smarts when needed to parse more formats.
+
+These attributes are parsed in order of declaration, regardless of if they are
+public or private, but only attributes declared in that class directly. The
+readonly or rw traits are ignored for attributes. Methods are also ignored.
+
+=head1 TYPES
+
+The following native attributes may be used without any traits:
+
+=item int8
+=item int16
+=item int32
+=item uint8
+=item uint16
+=item uint32
+
+These types consume 1, 2, or 4 bytes as appropriate for the type.
+
+Buf is another type that lends itself to representing this data. It has no
+obvious length and requires the C<read> trait to consume it (see the traits
+section below).
+
+A variant of Buf, C<StaticData>, is provided to represent bytes that are known
+in advance. It requires a default value of a Buf, which is used to determine
+the number of bytes to consume, and these bytes are checked with the default
+value. An exception is raised if these bytes do not match. An appropriate use
+of this would be the magic bytes at the beginning of many file formats, or the
+null terminator at the end of a CString, for example:
+
+=begin code
+
+# Magic for PNG files
+class PNGFile is Binary::Structured {
+	has StaticData $.magic = Buf.new(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+}
+
+=end code
+
+These structures may be nested. Provide an attribute that subclasses
+C<Binary::Structured> to include another structure at this position. This inner
+structure takes over control until it is done parsing or building, and then the
+outer structure resumes parsing or building.
+
+=begin code
+
+class Inner is Binary::Structured {
+	has int8 $.value;
+}
+class Outer is Binary::Structured {
+	has int8 $.before;
+	has Inner $.inner;
+	has int8 $.after;
+}
+# This would be able to parse Buf.new(1, 2, 3)
+# $outer.before would be 1, $outer.inner.value would be 2,
+# and $outer.after would be 3.
+
+=end code
+
+Multiple structures can be handled by using an C<Array> of subclasses. Use the
+C<read> trait to control when it stops trying to adding values into the array.
+See the traits section below for examples on controlling iteration.
+
+=head1 METHODS
 
 =end pod
 
@@ -49,8 +132,10 @@ multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) is export {
 subset StaticData of Blob;
 subset AutoData of Any;
 
-class ElementCount is Int {}
+my class ElementCount is Int {}
 
+#| Exception raised when data in a C<StaticData> does not match the bytes
+#| consumed.
 class X::Constructed::StaticMismatch is Exception {
 	has $.got;
 	has $.expected;
@@ -60,28 +145,39 @@ class X::Constructed::StaticMismatch is Exception {
 	}
 }
 
+#| Superclass of formats. Some methods are meant for implementing various trait
+#| helpers (see below).
 class Constructed {
-	has Int $.pos is rw = 0;
-	has Blob $.data;
-	has Constructed $.parent is rw;
+	#| Current position of parsing of the Buf.
+	has Int $.pos is readonly = 0;
+	#| Data being parsed.
+	has Blob $.data is readonly;
+	has Constructed $!parent;
 
-	method peek-one {
-		return $!data[$!pos];
-	}
-
+	#| Returns a Buf of the next C<$count> bytes but without advancing the
+	#| position, used for lookahead in the C<is read> trait.
 	method peek(Int $count) {
 		my $subbuf = $!data.subbuf($!pos, $count);
 		return $subbuf;
 	}
 
+	#| Returns the next byte as an Int without advancing the position. More
+	#| efficient than regular C<peek>, used for lookahead in the C<is read>
+	#| trait.
+	method peek-one {
+		return $!data[$!pos];
+	}
+
+	#| Method used to consume C<$count> bytes from the data, returning it as a
+	#| Buf. Advances the position by the specified count.
 	method pull(Int $count) {
 		my $subbuf = $!data.subbuf($!pos, $count);
 		$!pos += $count;
 		return $subbuf;
 	}
 
-	#= Helper method for reader methods to indicate a certain number of
-	# elements rather than a certain number of bytes
+	#| Helper method for reader methods to indicate a certain number of
+	#| elements/iterations rather than a certain number of bytes.
 	method pull-elements(Int $count) returns ElementCount {
 		return ElementCount.new($count);
 	}
@@ -106,6 +202,7 @@ class Constructed {
 		return $inner;
 	}
 
+	# Reasonably fast and detailed (but verbose) debug output.
 	method gist {
 		my $s = '{ ';
 		my @attrs = self.^attributes(:local);
@@ -121,6 +218,10 @@ class Constructed {
 		$attr.set_value(self, (my $ = $value));
 	}
 
+	#| Takes a Buf of data to parse, with an optional position to start parsing
+	#| at, and a parent C<Binary::Structured> object (purely for subsequent
+	#| parsing methods for traits). Typically only with C<$data> and maybe
+	#| C<$pos>.
 	method parse(Blob $data, Int :$pos=0, Constructed :$parent) {
 		$!data = $data;
 		$!pos = $pos;
@@ -240,6 +341,7 @@ class Constructed {
 		return $attr.get_value(self);
 	}
 
+	#| Construct a C<Buf> from the current state of this object.
 	method build() returns Blob {
 		my Buf $buf .= new;
 
@@ -281,6 +383,38 @@ class Constructed {
 		return $buf;
 	}
 }
+
+=begin pod
+
+=head1 TRAITS
+
+Traits are provided to add additional parsing control. Most of them take
+methods as arguments, which operate in the context of the parsed (or partially
+parsed) object, so you can refer to previous attributes.
+
+### C<is read>
+
+The C<is read> trait controls reading of C<Buf>s and C<Array>s. For C<Buf>,
+return a C<Buf> built using C<self.pull($count)> (to ensure the position is
+advanced properly). C<$count> here could be a reference to a previously parsed
+value, could be a constant value, or you can use a loop along with
+C<peek-one>/C<peek> to concatenate to a Buf.
+
+For C<Array>, return a count of bytes as an C<Int>, or return a number of
+elements to read using C<self.pull-elements($count)>. Note that
+C<pull-elements> does not advance the position immediately so C<peek> is less
+useful here.
+
+### C<is written>
+
+The C<is written> trait controls how a given attribute is constructed when
+C<build> is called. It provides a way to update values based on other
+attributes. It's best used on things that would be private attributes, like
+lengths and some checksums. Since C<build> is only called when all attributes
+are filled, you can refer to attributes that have not been written (unlike C<is
+read>).
+
+=end pod
 
 class ParamValue is Constructed {}
 
@@ -351,11 +485,4 @@ class Parameters is Constructed {
 	has StaticData $.static = Buf.new(0xff, 0xff, 0 xx 6);
 
 	has Array[ParamGroup] $.groups;
-}
-
-class AnyFile is Constructed {
-	has Buf $.stuff is read(method {
-		note "got here already? {self}";
-		return $.data.bytes;
-	});
 }
