@@ -6,16 +6,16 @@ use Test;
 use BinaryScanner;
 
 class InnerStruct is Constructed {
-	has uint8 $.a is rw;
-	has uint8 $.b is rw;
+	has int8 $.a is rw;
+	has int8 $.b is rw;
 }
 
 class OuterStruct is Constructed {
-	has uint8 $.before is rw;
+	has int8 $.before is rw;
 
 	has InnerStruct $.inner is rw;
 
-	has uint8 $.after is rw;
+	has int8 $.after is rw;
 }
 
 subtest 'basic parse', {

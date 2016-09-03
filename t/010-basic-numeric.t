@@ -34,6 +34,7 @@ subtest 'parse with unsigned', {
 	$parser.parse($buf);
 
 	# NOTE: little endian assumed by default
+	todo 'unsigned ints are treated as signed (RT 127210)', 3;
 	is $parser.a, 0xff, 'uint8';
 	is $parser.b, 0xffff, 'uint16';
 	is $parser.c, 0xffffffff, 'uint32';
@@ -64,6 +65,7 @@ subtest 'write with overflow', {
 
 	# NOTE: little endian assumed by default
 	# Add some extra bits in front to overflow the value
+	todo 'unsigned ints are treated as signed (RT 127210)', 3;
 	$parser.a = 0xf01;
 	$parser.b = 0xf0302;
 	$parser.c = 0xf07060504;

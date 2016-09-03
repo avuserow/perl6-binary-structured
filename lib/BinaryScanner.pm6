@@ -176,6 +176,9 @@ class Constructed {
 					$attr.set_value(self, @array);
 				}
 
+				when uint | int {
+					die "Unsupported type: $attr.gist(): cannot use native types without length";
+				}
 				when uint8 {
 					# manual cast to uint8 is needed to handle bounds
 					self!set-attr-value-rw($attr, (my uint8 $ = self.pull(1)[0]));
@@ -196,6 +199,9 @@ class Constructed {
 				}
 				when int32 {
 					self!set-attr-value-rw($attr, self.pull(4).unpack('V'));
+				}
+				when Int {
+					die "Unsupported type: $attr.gist(): cannot use object Int types without length";
 				}
 
 				when Buf {
