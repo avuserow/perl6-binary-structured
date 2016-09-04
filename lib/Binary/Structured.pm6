@@ -61,9 +61,13 @@ be used on attributes for parsing and building without the help of any traits:
 
 These types consume 1, 2, or 4 bytes as appropriate for the type.
 
+=item Buf
+
 Buf is another type that lends itself to representing this data. It has no
 obvious length and requires the C<read> trait to consume it (see the traits
 section below).
+
+=item StaticData
 
 A variant of Buf, C<StaticData>, is provided to represent bytes that are known
 in advance. It requires a default value of a Buf, which is used to determine
@@ -80,6 +84,8 @@ class PNGFile is Binary::Structured {
 }
 
 =end code
+
+=item Binary::Structured subclass
 
 These structures may be nested. Provide an attribute that subclasses
 C<Binary::Structured> to include another structure at this position. This inner
@@ -101,6 +107,8 @@ class Outer is Binary::Structured {
 # and $outer.after would be 3.
 
 =end code
+
+=item Array[Binary::Structured]
 
 Multiple structures can be handled by using an C<Array> of subclasses. Use the
 C<read> trait to control when it stops trying to adding values into the array.
@@ -426,9 +434,5 @@ read>).
 =head1 TODO
 
 See L<TODO>.
-
-=head1 SEE ALSO
-
-=item The PackUnpack module
 
 =end pod
