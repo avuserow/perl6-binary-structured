@@ -28,7 +28,7 @@ DESCRIPTION
 
 Binary::Structured provides a way to define classes which know how to parse and emit binary data based on the class attributes. The goal of this module is to provide building blocks to describe an entire file (or well-defined section of a file), which can easily be parsed, edited, and rebuilt.
 
-This module was inspired by the Python library `construct`, with the class-based representation inspired by Perl 6's `NativeCall`. 
+This module was inspired by the Python library `construct`, with the class-based representation inspired by Perl 6's `NativeCall`.
 
 Types of the attributes are used whenever possible to drive behavior, with custom traits provided to add more smarts when needed to parse more formats.
 
@@ -53,7 +53,11 @@ Perl 6 provides a wealth of native sized types. The following native types may b
 
 These types consume 1, 2, or 4 bytes as appropriate for the type.
 
+  * Buf
+
 Buf is another type that lends itself to representing this data. It has no obvious length and requires the `read` trait to consume it (see the traits section below).
+
+  * StaticData
 
 A variant of Buf, `StaticData`, is provided to represent bytes that are known in advance. It requires a default value of a Buf, which is used to determine the number of bytes to consume, and these bytes are checked with the default value. An exception is raised if these bytes do not match. An appropriate use of this would be the magic bytes at the beginning of many file formats, or the null terminator at the end of a CString, for example:
 
@@ -61,6 +65,8 @@ A variant of Buf, `StaticData`, is provided to represent bytes that are known in
     class PNGFile is Binary::Structured {
 	    has StaticData $.magic = Buf.new(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
     }
+
+  * Binary::Structured subclass
 
 These structures may be nested. Provide an attribute that subclasses `Binary::Structured` to include another structure at this position. This inner structure takes over control until it is done parsing or building, and then the outer structure resumes parsing or building.
 
@@ -76,18 +82,20 @@ These structures may be nested. Provide an attribute that subclasses `Binary::St
     # $outer.before would be 1, $outer.inner.value would be 2,
     # and $outer.after would be 3.
 
+  * Array[Binary::Structured]
+
 Multiple structures can be handled by using an `Array` of subclasses. Use the `read` trait to control when it stops trying to adding values into the array. See the traits section below for examples on controlling iteration.
 
 METHODS
 =======
 
-class X::Constructed::StaticMismatch
-------------------------------------
+class X::Binary::Structured::StaticMismatch
+-------------------------------------------
 
 Exception raised when data in a C<StaticData> does not match the bytes consumed.
 
-class Constructed
------------------
+class Binary::Structured
+------------------------
 
 Superclass of formats. Some methods are meant for implementing various trait helpers (see below).
 
@@ -143,7 +151,7 @@ Helper method for reader methods to indicate a certain number of elements/iterat
 method parse(
     Blob $data, 
     Int :$pos = 0, 
-    Constructed :$parent
+    Binary::Structured :$parent
 ) returns Mu
 ```
 
@@ -181,8 +189,3 @@ TODO
 ====
 
 See [TODO](TODO).
-
-SEE ALSO
-========
-
-  * The PackUnpack module
