@@ -1,5 +1,6 @@
 - port tests from Python's construct (construct/construct/protocols/application and construct/tests) and P5's Data::ParseBinary
 - remove requirement to Array[Inner].new for arrays
+- add native type Arrays (e.g. Array[uint32])
 - polish up `indirect-type` and/or add alternatives?
 - polish up trait naming and return values
 - endianness!

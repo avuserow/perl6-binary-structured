@@ -120,10 +120,23 @@ See the traits section below for examples on controlling iteration.
 
 use experimental :pack;
 
+my enum Endianness <LITTLE BIG>;
+
 my role ConstructedAttributeHelper {
 	has Routine $.reader is rw;
 	has Routine $.writer is rw;
 	has Routine $.indirect-type is rw;
+	has Endianness $.endianness is rw = LITTLE;
+}
+
+multi sub trait_mod:<is>(Attribute:D $a, :$big-endian!) is export {
+	$a does ConstructedAttributeHelper;
+	$a.endianness = BIG;
+}
+
+multi sub trait_mod:<is>(Attribute:D $a, :$little-endian!) is export {
+	$a does ConstructedAttributeHelper;
+	$a.endianness = LITTLE;
 }
 
 multi sub trait_mod:<is>(Attribute:D $a, :$read!) is export {
@@ -165,7 +178,7 @@ class Binary::Structured {
 	has Int $.pos is readonly = 0;
 	#| Data being parsed.
 	has Blob $.data is readonly;
-	has Binary::Structured $!parent;
+	has Binary::Structured $.parent is readonly;
 
 	#| Returns a Buf of the next C<$count> bytes but without advancing the
 	#| position, used for lookahead in the C<is read> trait.
@@ -220,7 +233,22 @@ class Binary::Structured {
 		my $s = '{ ';
 		my @attrs = self.^attributes(:local);
 		for @attrs -> $attr {
-			$s ~= "$attr.name() => $attr.get_value(self).gist() ";
+			my $val;
+			given $attr.type {
+				when uint8 {
+					$val = (my uint8 $ = $attr.get_value(self));
+				}
+				when uint16 {
+					$val = (my uint16 $ = $attr.get_value(self));
+				}
+				when uint32 {
+					$val = (my uint32 $ = $attr.get_value(self));
+				}
+				default {
+					$val = $attr.get_value(self).gist();
+				}
+			}
+				$s ~= "$attr.name() => $val ";
 		}
 		return $s ~ '}';
 	}
@@ -230,6 +258,17 @@ class Binary::Structured {
 	method !set-attr-value-rw($attr, $value) {
 		$attr.set_value(self, (my $ = $value));
 	}
+
+	my %UNPACK_CODES = (
+		LITTLE => {
+			2 => 'v',
+			4 => 'V',
+		},
+		BIG => {
+			2 => 'n',
+			4 => 'N',
+		},
+	);
 
 	#| Takes a Buf of data to parse, with an optional position to start parsing
 	#| at, and a parent C<Binary::Structured> object (purely for subsequent
@@ -243,6 +282,11 @@ class Binary::Structured {
 		my @attrs = self.^attributes(:local);
 		die "{self} has no attributes!" unless @attrs;
 		for @attrs -> $attr {
+			my $endianness = LITTLE;
+			if $attr ~~ ConstructedAttributeHelper && $attr.endianness {
+				$endianness = $attr.endianness;
+			}
+
 			given $attr.type {
 				when Binary::Structured {
 					my $inner-type = $attr.type;
@@ -293,26 +337,33 @@ class Binary::Structured {
 				when uint | int {
 					die "Unsupported type: $attr.gist(): cannot use native types without length";
 				}
+				when uint64 | int64 {
+					die "Unsupported type: $attr.gist(): not yet implemented";
+				}
 				when uint8 {
 					# manual cast to uint8 is needed to handle bounds
 					self!set-attr-value-rw($attr, (my uint8 $ = self.pull(1)[0]));
 				}
 				when uint16 {
-					# manual cast to uint16 is needed to handle bounds
-					self!set-attr-value-rw($attr, (my uint16 $ = self.pull(2).unpack('v')));
+					# force uint16 to handle bounds
+					my uint16 $value = self.pull(2).unpack(%UNPACK_CODES{$endianness}{2});
+					self!set-attr-value-rw($attr, $value);
 				}
 				when uint32 {
-					# manual cast to uint32 is needed to handle bounds
-					self!set-attr-value-rw($attr, (my uint32 $ = self.pull(4).unpack('V')));
+					# force uint32 to handle bounds
+					my uint32 $value = self.pull(4).unpack(%UNPACK_CODES{$endianness}{4});
+					self!set-attr-value-rw($attr, $value);
 				}
 				when int8 {
 					self!set-attr-value-rw($attr, self.pull(1)[0]);
 				}
 				when int16 {
-					self!set-attr-value-rw($attr, self.pull(2).unpack('v'));
+					my int16 $value = self.pull(2).unpack(%UNPACK_CODES{$endianness}{2});
+					self!set-attr-value-rw($attr, $value);
 				}
 				when int32 {
-					self!set-attr-value-rw($attr, self.pull(4).unpack('V'));
+					my int32 $value = self.pull(4).unpack(%UNPACK_CODES{$endianness}{4});
+					self!set-attr-value-rw($attr, $value);
 				}
 				when Int {
 					die "Unsupported type: $attr.gist(): cannot use object Int types without length";
