@@ -208,12 +208,12 @@ class Binary::Structured {
 		return ElementCount.new($count);
 	}
 
-	method !inline-parse($attr, $inner-type is copy) {
+	method !inline-parse($attr, $inner-type is copy, Int :$index) {
 #		if %indirect-type{$attr}:exists {
 #			$inner-type = %indirect-type{$attr}(self);
 #		}
 		my $inner = $inner-type.new;
-		$inner.parse($!data, :$!pos, :parent(self));
+		$inner.parse($!data, :$!pos, :parent(self), :$index);
 		CATCH {
 			when X::Assignment {
 				note "LAST1";
@@ -274,7 +274,7 @@ class Binary::Structured {
 	#| at, and a parent C<Binary::Structured> object (purely for subsequent
 	#| parsing methods for traits). Typically only with C<$data> and maybe
 	#| C<$pos>.
-	method parse(Blob $data, Int :$pos=0, Binary::Structured :$parent) {
+	method parse(Blob $data, Int :$pos=0, Binary::Structured :$parent, Int :$index) {
 		$!data = $data;
 		$!pos = $pos;
 		$!parent = $parent;
@@ -301,34 +301,35 @@ class Binary::Structured {
 						die "whoa, can't handle a $attr.type.gist() yet :(";
 					}
 					die "no reader for $attr.gist()" unless $attr.reader;
-					my $limit = $attr.reader.(self);
+					my $limit = $attr.reader.(self, :index($++));
 					my $limit-type = 'bytes';
 					if $limit ~~ Buf {
 						die "XXX: Bufs for readers for arrays NYI";
 					}
 
 					my @array = $attr.type.new;
-
-					# This attr must know when to stop somehow...
 					my $inner-type = $attr.type.of;
 
+					# This attr must know when to stop somehow...
 					if $limit ~~ ElementCount {
-						for ^$limit {
+						for ^$limit -> $i {
 							# prevent out of bounds...
 							die "$attr.gist(): read past end of buffer!" if $!pos >= $!data.bytes;
-							my $inner = self!inline-parse($attr, $inner-type);
+							my $inner = self!inline-parse($attr, $inner-type, :index($i));
 							@array.push($inner);
 						}
 					} else {
 						my $initial-pos = $!pos;
+						my $i = 0;
 						while $!pos - $initial-pos < $limit {
 							die "$attr.gist(): read past end of buffer!" if $!pos >= $!data.bytes;
-							my $inner = self!inline-parse($attr, $inner-type);
+							my $inner = self!inline-parse($attr, $inner-type, :index($i));
 							@array.push($inner);
+							$i++;
 						}
 
 						# XXX: maybe this should be a warning
-						die "$attr.gist(): read too many bytes!" if $limit < $!pos - $initial-pos;
+						die "$attr.gist(): read too many bytes: $limit < $!pos - $initial-pos ({+@array} elements)" if $!pos - $initial-pos > $limit;
 					}
 
 					$attr.set_value(self, @array);
@@ -371,7 +372,7 @@ class Binary::Structured {
 
 				when Buf {
 					die "no reader for $attr.gist()" unless $attr.reader;
-					my $data = $attr.reader.(self);
+					my $data = $attr.reader.(self, :$index);
 					self!set-attr-value-rw($attr, $data);
 				}
 
@@ -387,7 +388,7 @@ class Binary::Structured {
 				when AutoData {
 					# XXX: factor into Buf above?
 					die "no reader for $attr.gist()" unless $attr.reader;
-					my $data = $attr.reader.(self);
+					my $data = $attr.reader.(self, :$index);
 					self!set-attr-value-rw($attr, $data);
 				}
 
