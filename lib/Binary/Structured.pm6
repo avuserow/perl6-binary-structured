@@ -130,27 +130,37 @@ my role ConstructedAttributeHelper {
 }
 
 multi sub trait_mod:<is>(Attribute:D $a, :$big-endian!) is export {
-	$a does ConstructedAttributeHelper;
+	unless $a ~~ ConstructedAttributeHelper {
+		$a does ConstructedAttributeHelper;
+	}
 	$a.endianness = BIG;
 }
 
 multi sub trait_mod:<is>(Attribute:D $a, :$little-endian!) is export {
-	$a does ConstructedAttributeHelper;
+	unless $a ~~ ConstructedAttributeHelper {
+		$a does ConstructedAttributeHelper;
+	}
 	$a.endianness = LITTLE;
 }
 
 multi sub trait_mod:<is>(Attribute:D $a, :$read!) is export {
-	$a does ConstructedAttributeHelper;
+	unless $a ~~ ConstructedAttributeHelper {
+		$a does ConstructedAttributeHelper;
+	}
 	$a.reader = $read;
 }
 
 multi sub trait_mod:<is>(Attribute:D $a, :$written!) is export {
-	$a does ConstructedAttributeHelper;
+	unless $a ~~ ConstructedAttributeHelper {
+		$a does ConstructedAttributeHelper;
+	}
 	$a.writer = $written;
 }
 
 multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) is export {
-	$a does ConstructedAttributeHelper;
+	unless $a ~~ ConstructedAttributeHelper {
+		$a does ConstructedAttributeHelper;
+	}
 	$a.indirect-type = $indirect-type;
 }
 
