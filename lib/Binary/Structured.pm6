@@ -214,16 +214,16 @@ class Binary::Structured {
 #		}
 		my $inner = $inner-type.new;
 		$inner.parse($!data, :$!pos, :parent(self), :$index);
-		CATCH {
-			when X::Assignment {
-				note "LAST1";
-				return;
-			}
-			when X::Binary::Structured::StaticMismatch {
-				note "LAST2";
-				return;
-			}
-		}
+#		CATCH {
+#			when X::Assignment {
+#				note "LAST1";
+#				return;
+#			}
+#			when X::Binary::Structured::StaticMismatch {
+#				note "LAST2";
+#				return;
+#			}
+#		}
 		$!pos = $inner.pos;
 		return $inner;
 	}
@@ -288,6 +288,31 @@ class Binary::Structured {
 			}
 
 			given $attr.type {
+				when uint8 {
+					# manual cast to uint8 is needed to handle bounds
+					self!set-attr-value-rw($attr, (my uint8 $ = $!data[$!pos++]));
+				}
+				when uint16 {
+					# force uint16 to handle bounds
+					my uint16 $value = self.pull(2).unpack(%UNPACK_CODES{$endianness}{2});
+					self!set-attr-value-rw($attr, $value);
+				}
+				when uint32 {
+					# force uint32 to handle bounds
+					my uint32 $value = self.pull(4).unpack(%UNPACK_CODES{$endianness}{4});
+					self!set-attr-value-rw($attr, $value);
+				}
+				when int8 {
+					self!set-attr-value-rw($attr, $!data[$!pos++]);
+				}
+				when int16 {
+					my int16 $value = self.pull(2).unpack(%UNPACK_CODES{$endianness}{2});
+					self!set-attr-value-rw($attr, $value);
+				}
+				when int32 {
+					my int32 $value = self.pull(4).unpack(%UNPACK_CODES{$endianness}{4});
+					self!set-attr-value-rw($attr, $value);
+				}
 				when Binary::Structured {
 					my $inner-type = $attr.type;
 					my $inner = self!inline-parse($attr, $inner-type);
@@ -302,7 +327,6 @@ class Binary::Structured {
 					}
 					die "no reader for $attr.gist()" unless $attr.reader;
 					my $limit = $attr.reader.(self, :index($++));
-					my $limit-type = 'bytes';
 					if $limit ~~ Buf {
 						die "XXX: Bufs for readers for arrays NYI";
 					}
@@ -335,40 +359,9 @@ class Binary::Structured {
 					$attr.set_value(self, @array);
 				}
 
-				when uint | int {
-					die "Unsupported type: $attr.gist(): cannot use native types without length";
-				}
-				when uint64 | int64 {
-					die "Unsupported type: $attr.gist(): not yet implemented";
-				}
-				when uint8 {
-					# manual cast to uint8 is needed to handle bounds
-					self!set-attr-value-rw($attr, (my uint8 $ = self.pull(1)[0]));
-				}
-				when uint16 {
-					# force uint16 to handle bounds
-					my uint16 $value = self.pull(2).unpack(%UNPACK_CODES{$endianness}{2});
-					self!set-attr-value-rw($attr, $value);
-				}
-				when uint32 {
-					# force uint32 to handle bounds
-					my uint32 $value = self.pull(4).unpack(%UNPACK_CODES{$endianness}{4});
-					self!set-attr-value-rw($attr, $value);
-				}
-				when int8 {
-					self!set-attr-value-rw($attr, self.pull(1)[0]);
-				}
-				when int16 {
-					my int16 $value = self.pull(2).unpack(%UNPACK_CODES{$endianness}{2});
-					self!set-attr-value-rw($attr, $value);
-				}
-				when int32 {
-					my int32 $value = self.pull(4).unpack(%UNPACK_CODES{$endianness}{4});
-					self!set-attr-value-rw($attr, $value);
-				}
-				when Int {
-					die "Unsupported type: $attr.gist(): cannot use object Int types without length";
-				}
+#				when Int {
+#					die "Unsupported type: $attr.gist(): cannot use object Int types without length";
+#				}
 
 				when Buf {
 					die "no reader for $attr.gist()" unless $attr.reader;
@@ -385,6 +378,12 @@ class Binary::Structured {
 					}
 				}
 
+				when uint | int {
+					die "Unsupported type: $attr.gist(): cannot use native types without length";
+				}
+				when uint64 | int64 {
+					die "Unsupported type: $attr.gist(): not yet implemented";
+				}
 				when AutoData {
 					# XXX: factor into Buf above?
 					die "no reader for $attr.gist()" unless $attr.reader;
@@ -413,24 +412,29 @@ class Binary::Structured {
 		my @attrs = self.^attributes(:local);
 		die "{self} has no attributes!" unless @attrs;
 		for @attrs -> $attr {
+			my $endianness = LITTLE;
+			if $attr ~~ ConstructedAttributeHelper && $attr.endianness {
+				$endianness = $attr.endianness;
+			}
+
 			given $attr.type {
 				when uint8 {
 					$buf.push: self!get-attr-value($attr);
 				}
 				when uint16 {
-					$buf.push: pack('v', self!get-attr-value($attr));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr));
 				}
 				when uint32 {
-					$buf.push: pack('V', self!get-attr-value($attr));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr));
 				}
 				when int8 {
 					$buf.push: self!get-attr-value($attr);
 				}
 				when int16 {
-					$buf.push: pack('v', self!get-attr-value($attr));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr));
 				}
 				when int32 {
-					$buf.push: pack('V', self!get-attr-value($attr));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr));
 				}
 				when Buf | StaticData {
 					$buf.push: |self!get-attr-value($attr);
