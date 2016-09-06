@@ -408,15 +408,15 @@ class Binary::Structured {
 		}
 	}
 
-	method !get-attr-value($attr) {
+	method !get-attr-value($attr, Int :$index) {
 		if $attr ~~ ConstructedAttributeHelper && $attr.writer {
-			return $attr.writer.(self);
+			return $attr.writer.(self, :$index);
 		}
 		return $attr.get_value(self);
 	}
 
 	#| Construct a C<Buf> from the current state of this object.
-	method build() returns Blob {
+	method build(Int :$index) returns Blob {
 		my Buf $buf .= new;
 
 		my @attrs = self.^attributes(:local);
@@ -429,29 +429,31 @@ class Binary::Structured {
 
 			given $attr.type {
 				when uint8 {
-					$buf.push: self!get-attr-value($attr);
+					$buf.push: self!get-attr-value($attr, :$index);
 				}
 				when uint16 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr, :$index));
 				}
 				when uint32 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr, :$index));
 				}
 				when int8 {
-					$buf.push: self!get-attr-value($attr);
+					$buf.push: self!get-attr-value($attr, :$index);
 				}
 				when int16 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr, :$index));
 				}
 				when int32 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr, :$index));
 				}
 				when Buf | StaticData {
-					$buf.push: |self!get-attr-value($attr);
+					$buf.push: |self!get-attr-value($attr, :$index);
 				}
 				when Array | Binary::Structured {
-					my $inner = self!get-attr-value($attr);
-					$buf.push: .build for $inner.list;
+					my $inner = self!get-attr-value($attr, :$index);
+					for $inner.list.kv -> $k, $v {
+						$buf.push: $v.build(:index($k));
+					}
 				}
 				default {
 					die "Cannot write an attribute of type $_.gist() yet!";
