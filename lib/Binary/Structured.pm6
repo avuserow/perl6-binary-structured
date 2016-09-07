@@ -408,15 +408,15 @@ class Binary::Structured {
 		}
 	}
 
-	method !get-attr-value($attr, Int :$index) {
+	method !get-attr-value($attr, Int :$index, Binary::Structured :$parent) {
 		if $attr ~~ ConstructedAttributeHelper && $attr.writer {
-			return $attr.writer.(self, :$index);
+			return $attr.writer.(self, :$index, :$parent);
 		}
 		return $attr.get_value(self);
 	}
 
 	#| Construct a C<Buf> from the current state of this object.
-	method build(Int :$index) returns Blob {
+	method build(Int :$index, Binary::Structured :$parent) returns Blob {
 		my Buf $buf .= new;
 
 		my @attrs = self.^attributes(:local);
@@ -429,30 +429,30 @@ class Binary::Structured {
 
 			given $attr.type {
 				when uint8 {
-					$buf.push: self!get-attr-value($attr, :$index);
+					$buf.push: self!get-attr-value($attr, :$index, :$parent);
 				}
 				when uint16 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr, :$index));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr, :$index, :$parent));
 				}
 				when uint32 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr, :$index));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr, :$index, :$parent));
 				}
 				when int8 {
-					$buf.push: self!get-attr-value($attr, :$index);
+					$buf.push: self!get-attr-value($attr, :$index, :$parent);
 				}
 				when int16 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr, :$index));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr, :$index, :$parent));
 				}
 				when int32 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr, :$index));
+					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr, :$index, :$parent));
 				}
 				when Buf | StaticData {
-					$buf.push: |self!get-attr-value($attr, :$index);
+					$buf.push: |self!get-attr-value($attr, :$index, :$parent);
 				}
 				when Array | Binary::Structured {
-					my $inner = self!get-attr-value($attr, :$index);
+					my $inner = self!get-attr-value($attr, :$index, :$parent);
 					for $inner.list.kv -> $k, $v {
-						$buf.push: $v.build(:index($k));
+						$buf.push: $v.build(:index($k), :parent(self));
 					}
 				}
 				default {
