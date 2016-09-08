@@ -59,7 +59,9 @@ be used on attributes for parsing and building without the help of any traits:
 =item uint16
 =item uint32
 
-These types consume 1, 2, or 4 bytes as appropriate for the type.
+These types consume 1, 2, or 4 bytes as appropriate for the type. These values
+are interpreted as little endian by default. Big endian representations may be
+indicated by using the C<is big-endian> trait, see the traits section below.
 
 =item Buf
 
@@ -281,10 +283,13 @@ class Binary::Structured {
 	);
 
 	#| Takes a Buf of data to parse, with an optional position to start parsing
-	#| at, and a parent C<Binary::Structured> object (purely for subsequent
-	#| parsing methods for traits). Typically only with C<$data> and maybe
-	#| C<$pos>.
-	method parse(Blob $data, Int :$pos=0, Binary::Structured :$parent, Int :$index) {
+	#| at.
+	multi method parse(Blob $data, Int :$pos=0) {
+		# This alias just exists so we can loosely hide the extra parameters.
+		nextsame;
+	}
+
+	multi method parse(Blob $data, Int :$pos=0, Binary::Structured :$parent, Int :$index) {
 		$!data = $data;
 		$!pos = $pos;
 		$!parent = $parent;
@@ -473,7 +478,7 @@ Traits are provided to add additional parsing control. Most of them take
 methods as arguments, which operate in the context of the parsed (or partially
 parsed) object, so you can refer to previous attributes.
 
-### C<is read>
+=head2 C<is read>
 
 The C<is read> trait controls reading of C<Buf>s and C<Array>s. For C<Buf>,
 return a C<Buf> built using C<self.pull($count)> (to ensure the position is
@@ -486,7 +491,7 @@ elements to read using C<self.pull-elements($count)>. Note that
 C<pull-elements> does not advance the position immediately so C<peek> is less
 useful here.
 
-### C<is written>
+=head2 C<is written>
 
 The C<is written> trait controls how a given attribute is constructed when
 C<build> is called. It provides a way to update values based on other
@@ -494,6 +499,17 @@ attributes. It's best used on things that would be private attributes, like
 lengths and some checksums. Since C<build> is only called when all attributes
 are filled, you can refer to attributes that have not been written (unlike C<is
 read>).
+
+=head2 C<is big-endian>
+
+Applies to native integers (int16, int32, uint16, uint32), and indicates that
+this value should be read and written as a big endian value (with the most
+significant byte first) rather than the default of little endian.
+
+=head2 C<is little-endian>
+
+Little endian is the default for numeric values, but the trait is provided for
+completeness.
 
 =head1 REQUIREMENTS
 
