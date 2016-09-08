@@ -51,7 +51,7 @@ Perl 6 provides a wealth of native sized types. The following native types may b
 
   * uint32
 
-These types consume 1, 2, or 4 bytes as appropriate for the type.
+These types consume 1, 2, or 4 bytes as appropriate for the type. These values are interpreted as little endian by default. Big endian representations may be indicated by using the `is big-endian` trait, see the traits section below.
 
   * Buf
 
@@ -150,17 +150,19 @@ Helper method for reader methods to indicate a certain number of elements/iterat
 ```
 method parse(
     Blob $data, 
-    Int :$pos = 0, 
-    Binary::Structured :$parent
+    Int :$pos = 0
 ) returns Mu
 ```
 
-Takes a Buf of data to parse, with an optional position to start parsing at, and a parent C<Binary::Structured> object (purely for subsequent parsing methods for traits). Typically only with C<$data> and maybe C<$pos>.
+Takes a Buf of data to parse, with an optional position to start parsing at.
 
 ### method build
 
 ```
-method build() returns Blob
+method build(
+    Int :$index, 
+    Binary::Structured :$parent
+) returns Blob
 ```
 
 Construct a C<Buf> from the current state of this object.
@@ -170,15 +172,27 @@ TRAITS
 
 Traits are provided to add additional parsing control. Most of them take methods as arguments, which operate in the context of the parsed (or partially parsed) object, so you can refer to previous attributes.
 
-### `is read`
+`is read`
+---------
 
 The `is read` trait controls reading of `Buf`s and `Array`s. For `Buf`, return a `Buf` built using `self.pull($count)` (to ensure the position is advanced properly). `$count` here could be a reference to a previously parsed value, could be a constant value, or you can use a loop along with `peek-one`/`peek` to concatenate to a Buf.
 
 For `Array`, return a count of bytes as an `Int`, or return a number of elements to read using `self.pull-elements($count)`. Note that `pull-elements` does not advance the position immediately so `peek` is less useful here.
 
-### `is written`
+`is written`
+------------
 
 The `is written` trait controls how a given attribute is constructed when `build` is called. It provides a way to update values based on other attributes. It's best used on things that would be private attributes, like lengths and some checksums. Since `build` is only called when all attributes are filled, you can refer to attributes that have not been written (unlike `is read`).
+
+`is big-endian`
+---------------
+
+Applies to native integers (int16, int32, uint16, uint32), and indicates that this value should be read and written as a big endian value (with the most significant byte first) rather than the default of little endian.
+
+`is little-endian`
+------------------
+
+Little endian is the default for numeric values, but the trait is provided for completeness.
 
 REQUIREMENTS
 ============
