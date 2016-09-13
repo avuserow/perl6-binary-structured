@@ -149,27 +149,43 @@ multi sub trait_mod:<is>(Attribute:D $a, :$read!) is export {
 	unless $a ~~ ConstructedAttributeHelper {
 		$a does ConstructedAttributeHelper;
 	}
-	$a.reader = $read;
+
+	unless $a.type ~~ Array | Buf {
+		die "Unsupported attribute $a.gist() with `is read` trait";
+	}
+
+	if $read ~~ Routine {
+		$a.reader = $read;
+	} else {
+		die "Unsupported value for `is read` trait for $a.gist()";
+	}
 }
 
 multi sub trait_mod:<is>(Attribute:D $a, :$written!) is export {
 	unless $a ~~ ConstructedAttributeHelper {
 		$a does ConstructedAttributeHelper;
 	}
-	$a.writer = $written;
+
+
+	if $written ~~ Routine {
+		$a.writer = $written;
+	} else {
+		die "Unsupported value for `is written` trait for $a.gist()";
+	}
 }
 
-multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) is export {
-	unless $a ~~ ConstructedAttributeHelper {
-		$a does ConstructedAttributeHelper;
-	}
-	$a.indirect-type = $indirect-type;
-}
+#multi sub trait_mod:<is>(Attribute:D $a, :$indirect-type!) is export {
+#	unless $a ~~ ConstructedAttributeHelper {
+#		$a does ConstructedAttributeHelper;
+#	}
+#	$a.indirect-type = $indirect-type;
+#}
 
 # XXX: maybe these should be subclasses
 subset StaticData of Blob;
-subset AutoData of Any;
+# subset AutoData of Any;
 
+# See pull-elements below
 my class ElementCount is Int {}
 
 #| Exception raised when data in a C<StaticData> does not match the bytes
@@ -302,6 +318,8 @@ class Binary::Structured {
 				$endianness = $attr.endianness;
 			}
 
+			die "$attr.gist(): read past end of buffer!" if $!pos > $!data.bytes;
+
 			given $attr.type {
 				when uint8 {
 					# manual cast to uint8 is needed to handle bounds
@@ -374,10 +392,6 @@ class Binary::Structured {
 					$attr.set_value(self, @array);
 				}
 
-#				when Int {
-#					die "Unsupported type: $attr.gist(): cannot use object Int types without length";
-#				}
-
 				when Buf {
 					die "no reader for $attr.gist()" unless $attr.reader;
 					my $data = $attr.reader.(self, :$index);
@@ -399,12 +413,12 @@ class Binary::Structured {
 				when uint64 | int64 {
 					die "Unsupported type: $attr.gist(): not yet implemented";
 				}
-				when AutoData {
-					# XXX: factor into Buf above?
-					die "no reader for $attr.gist()" unless $attr.reader;
-					my $data = $attr.reader.(self, :$index);
-					self!set-attr-value-rw($attr, $data);
-				}
+#				when AutoData {
+#					# XXX: factor into Buf above?
+#					die "no reader for $attr.gist()" unless $attr.reader;
+#					my $data = $attr.reader.(self, :$index);
+#					self!set-attr-value-rw($attr, $data);
+#				}
 
 				default {
 					die "Cannot read an attribute of type $_.gist() yet!";
@@ -432,24 +446,31 @@ class Binary::Structured {
 				$endianness = $attr.endianness;
 			}
 
+			my ($value, $pos);
 			given $attr.type {
 				when uint8 {
-					$buf.push: self!get-attr-value($attr, :$index, :$parent);
+					$value = self!get-attr-value($attr, :$index, :$parent);
+					$buf.push: $value;
 				}
 				when uint16 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr, :$index, :$parent));
+					$value = self!get-attr-value($attr, :$index, :$parent);
+					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, $value);
 				}
 				when uint32 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr, :$index, :$parent));
+					$value = self!get-attr-value($attr, :$index, :$parent);
+					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, $value);
 				}
 				when int8 {
-					$buf.push: self!get-attr-value($attr, :$index, :$parent);
+					$value = self!get-attr-value($attr, :$index, :$parent);
+					$buf.push: $value;
 				}
 				when int16 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, self!get-attr-value($attr, :$index, :$parent));
+					$value = self!get-attr-value($attr, :$index, :$parent);
+					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, $value);
 				}
 				when int32 {
-					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, self!get-attr-value($attr, :$index, :$parent));
+					$value = self!get-attr-value($attr, :$index, :$parent);
+					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, $value);
 				}
 				when Buf | StaticData {
 					$buf.push: |self!get-attr-value($attr, :$index, :$parent);

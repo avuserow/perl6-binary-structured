@@ -37,3 +37,4 @@ Some time later:
 - use something other than experimental pack to pack/unpack
 --- contenders: custom code, Numeric::Pack, PackUnpack
 - add more typed exceptions
+- figure out how to subclass Blob/Buf properly for StaticData
