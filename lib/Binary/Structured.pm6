@@ -69,6 +69,11 @@ Buf is another type that lends itself to representing this data. It has no
 obvious length and requires the C<read> trait to consume it (see the traits
 section below).
 
+Note that you can provide both C<is read> and C<is written> to compute the
+value when parsing and building, allowing you to put in arbitrary bytes at this
+position. See C<StreamPosition> below if you just want to keep track of the
+current position.
+
 =item StaticData
 
 A variant of Buf, C<StaticData>, is provided to represent bytes that are known
@@ -86,6 +91,13 @@ class PNGFile is Binary::Structured {
 }
 
 =end code
+
+=item StreamPosition
+
+This exported class consumes no bytes, and writes no bytes. It just records the
+current stream position into this attribute when reading or writing so other
+variables can reference it later. Reader and writer traits are ignored on this
+attribute.
 
 =item Binary::Structured subclass
 
@@ -123,6 +135,8 @@ See the traits section below for examples on controlling iteration.
 use experimental :pack;
 
 my enum Endianness <LITTLE BIG>;
+
+our class StreamPosition is Int {}
 
 my role ConstructedAttributeHelper {
 	has Routine $.reader is rw;
@@ -166,6 +180,9 @@ multi sub trait_mod:<is>(Attribute:D $a, :$written!) is export {
 		$a does ConstructedAttributeHelper;
 	}
 
+	if $a.type ~~ StreamPosition {
+		die "Unsupported attribute $a.gist() with `is written` trait";
+	}
 
 	if $written ~~ Routine {
 		$a.writer = $written;
@@ -407,6 +424,11 @@ class Binary::Structured {
 					}
 				}
 
+				when StreamPosition {
+					# No need to set this rw
+					$attr.set_value(self, $!pos.clone);
+				}
+
 				when uint | int {
 					die "Unsupported type: $attr.gist(): cannot use native types without length";
 				}
@@ -481,6 +503,12 @@ class Binary::Structured {
 						$buf.push: $v.build(:index($k), :parent(self));
 					}
 				}
+
+				when StreamPosition {
+					# writing to the attribute here is intended
+					$attr.set_value(self, $buf.bytes);
+				}
+
 				default {
 					die "Cannot write an attribute of type $_.gist() yet!";
 				}

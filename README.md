@@ -57,6 +57,8 @@ These types consume 1, 2, or 4 bytes as appropriate for the type. These values a
 
 Buf is another type that lends itself to representing this data. It has no obvious length and requires the `read` trait to consume it (see the traits section below).
 
+Note that you can provide both `is read` and `is written` to compute the value when parsing and building, allowing you to put in arbitrary bytes at this position. See `StreamPosition` below if you just want to keep track of the current position.
+
   * StaticData
 
 A variant of Buf, `StaticData`, is provided to represent bytes that are known in advance. It requires a default value of a Buf, which is used to determine the number of bytes to consume, and these bytes are checked with the default value. An exception is raised if these bytes do not match. An appropriate use of this would be the magic bytes at the beginning of many file formats, or the null terminator at the end of a CString, for example:
@@ -65,6 +67,10 @@ A variant of Buf, `StaticData`, is provided to represent bytes that are known in
     class PNGFile is Binary::Structured {
 	    has StaticData $.magic = Buf.new(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
     }
+
+  * StreamPosition
+
+This exported class consumes no bytes, and writes no bytes. It just records the current stream position into this attribute when reading or writing so other variables can reference it later. Reader and writer traits are ignored on this attribute.
 
   * Binary::Structured subclass
 
