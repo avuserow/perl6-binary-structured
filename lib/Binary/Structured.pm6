@@ -143,6 +143,7 @@ my role ConstructedAttributeHelper {
 	has Routine $.writer is rw;
 	has Routine $.indirect-type is rw;
 	has Endianness $.endianness is rw = LITTLE;
+	has Bool $.rewritten is rw = False;
 }
 
 multi sub trait_mod:<is>(Attribute:D $a, :$big-endian!) is export {
@@ -157,6 +158,13 @@ multi sub trait_mod:<is>(Attribute:D $a, :$little-endian!) is export {
 		$a does ConstructedAttributeHelper;
 	}
 	$a.endianness = LITTLE;
+}
+
+multi sub trait_mod:<is>(Attribute:D $a, :$rewritten!) is export {
+	unless $a ~~ ConstructedAttributeHelper {
+		$a does ConstructedAttributeHelper;
+	}
+	$a.rewritten = True;
 }
 
 multi sub trait_mod:<is>(Attribute:D $a, :$read!) is export {
@@ -220,10 +228,13 @@ class X::Binary::Structured::StaticMismatch is Exception {
 #| helpers (see below).
 class Binary::Structured {
 	#| Current position of parsing of the Buf.
-	has Int $.pos is readonly = 0;
+	has Int $.pos is readonly = 0; # XXX consider replacing with private attr+method+trusts combo
 	#| Data being parsed.
 	has Blob $.data is readonly;
 	has Binary::Structured $.parent is readonly;
+	has Int %!attr-pos;
+	has Int %!attr-size;
+	has Buf $!output-buf;
 
 	#| Returns a Buf of the next C<$count> bytes but without advancing the
 	#| position, used for lookahead in the C<is read> trait.
@@ -251,6 +262,25 @@ class Binary::Structured {
 	#| elements/iterations rather than a certain number of bytes.
 	method pull-elements(Int $count) returns ElementCount {
 		return ElementCount.new($count);
+	}
+
+	#| Helper method to rewrite a previous attribute that is marked C<is
+	#| rewritten>. Only works on seekable buffers and may not change the length
+	#| of the buffer. Specify the attribute via string using the C<$!foo>
+	#| syntax (regardless of if it is public or private).
+	method rewrite-attribute(Str $attribute) {
+		my $attr = self.^attributes(:local).first(*.name eq $attribute);
+		die "Attribute '$attribute' not found for {self}!" unless $attr;
+		unless $attr ~~ ConstructedAttributeHelper && $attr.rewritten {
+			die "Attribute '$attribute' not marked `is rewritten`";
+		}
+
+		my $newdata = self!build-attribute($attr);
+		if $newdata.bytes != %!attr-size{$attr} {
+			die "Rewriting attribute '$attribute' changed size!";
+		}
+		my $pos = %!attr-pos{$attr};
+		$!output-buf[$pos + $_] = $newdata[$_] for ^$newdata.bytes;
 	}
 
 	method !inline-parse($attr, $inner-type is copy, Int :$index) {
@@ -340,7 +370,8 @@ class Binary::Structured {
 			given $attr.type {
 				when uint8 {
 					# manual cast to uint8 is needed to handle bounds
-					self!set-attr-value-rw($attr, (my uint8 $ = $!data[$!pos++]));
+					my uint8 $value = $!data[$!pos++];
+					self!set-attr-value-rw($attr, $value);
 				}
 				when uint16 {
 					# force uint16 to handle bounds
@@ -353,7 +384,8 @@ class Binary::Structured {
 					self!set-attr-value-rw($attr, $value);
 				}
 				when int8 {
-					self!set-attr-value-rw($attr, $!data[$!pos++]);
+					my uint8 $value = $!data[$!pos++];
+					self!set-attr-value-rw($attr, $value);
 				}
 				when int16 {
 					my int16 $value = self.pull(2).unpack(%UNPACK_CODES{$endianness}{2});
@@ -451,67 +483,89 @@ class Binary::Structured {
 
 	method !get-attr-value($attr, Int :$index, Binary::Structured :$parent) {
 		if $attr ~~ ConstructedAttributeHelper && $attr.writer {
-			return $attr.writer.(self, :$index, :$parent);
+			return $attr.writer.(self, :$index, :$parent, :position($!output-buf.bytes));
 		}
 		return $attr.get_value(self);
 	}
 
 	#| Construct a C<Buf> from the current state of this object.
-	method build(Int :$index, Binary::Structured :$parent) returns Blob {
-		my Buf $buf .= new;
+	multi method build() returns Blob {
+		samewith(Buf.new);
+	}
+
+	multi method build(Buf $output-buf, Int :$index, Binary::Structured :$parent) returns Blob {
+		$!output-buf = $output-buf;
 
 		my @attrs = self.^attributes(:local);
 		die "{self} has no attributes!" unless @attrs;
 		for @attrs -> $attr {
-			my $endianness = LITTLE;
-			if $attr ~~ ConstructedAttributeHelper && $attr.endianness {
-				$endianness = $attr.endianness;
+			if $attr ~~ ConstructedAttributeHelper {
+				if $attr.rewritten {
+					%!attr-pos{$attr} = $output-buf.bytes;
+				}
 			}
 
-			my ($value, $pos);
-			given $attr.type {
-				when uint8 {
-					$value = self!get-attr-value($attr, :$index, :$parent);
-					$buf.push: $value;
-				}
-				when uint16 {
-					$value = self!get-attr-value($attr, :$index, :$parent);
-					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, $value);
-				}
-				when uint32 {
-					$value = self!get-attr-value($attr, :$index, :$parent);
-					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, $value);
-				}
-				when int8 {
-					$value = self!get-attr-value($attr, :$index, :$parent);
-					$buf.push: $value;
-				}
-				when int16 {
-					$value = self!get-attr-value($attr, :$index, :$parent);
-					$buf.push: pack(%UNPACK_CODES{$endianness}{2}, $value);
-				}
-				when int32 {
-					$value = self!get-attr-value($attr, :$index, :$parent);
-					$buf.push: pack(%UNPACK_CODES{$endianness}{4}, $value);
-				}
-				when Buf | StaticData {
-					$buf.push: |self!get-attr-value($attr, :$index, :$parent);
-				}
-				when Array | Binary::Structured {
-					my $inner = self!get-attr-value($attr, :$index, :$parent);
-					for $inner.list.kv -> $k, $v {
-						$buf.push: $v.build(:index($k), :parent(self));
-					}
-				}
+			my $buf = self!build-attribute($attr, :$index, :$parent);
 
-				when StreamPosition {
-					# writing to the attribute here is intended
-					$attr.set_value(self, $buf.bytes);
-				}
+			if $attr ~~ ConstructedAttributeHelper && $attr.rewritten {
+				%!attr-size{$attr} = $buf.bytes;
+			}
 
-				default {
-					die "Cannot write an attribute of type $_.gist() yet!";
+			$output-buf.push: $buf;
+		}
+
+		return $output-buf;
+	}
+
+	method !build-attribute(Attribute $attr, Int :$index, Binary::Structured :$parent, Int :$position) returns Buf {
+		my Buf $buf .= new;
+		my $endianness = LITTLE;
+		if $attr ~~ ConstructedAttributeHelper {
+			$endianness = $attr.endianness;
+		}
+
+		given $attr.type {
+			when uint8 {
+				my $value = self!get-attr-value($attr, :$index, :$parent);
+				$buf.push: $value;
+			}
+			when uint16 {
+				my $value = self!get-attr-value($attr, :$index, :$parent);
+				$buf.push: pack(%UNPACK_CODES{$endianness}{2}, $value);
+			}
+			when uint32 {
+				my $value = self!get-attr-value($attr, :$index, :$parent);
+				$buf.push: pack(%UNPACK_CODES{$endianness}{4}, $value);
+			}
+			when int8 {
+				my $value = self!get-attr-value($attr, :$index, :$parent);
+				$buf.push: $value;
+			}
+			when int16 {
+				my $value = self!get-attr-value($attr, :$index, :$parent);
+				$buf.push: pack(%UNPACK_CODES{$endianness}{2}, $value);
+			}
+			when int32 {
+				my $value = self!get-attr-value($attr, :$index, :$parent);
+				$buf.push: pack(%UNPACK_CODES{$endianness}{4}, $value);
+			}
+			when Buf | StaticData {
+				$buf.push: |self!get-attr-value($attr, :$index, :$parent);
+			}
+			when Array | Binary::Structured {
+				my $inner = self!get-attr-value($attr, :$index, :$parent);
+				for $inner.list.kv -> $k, $v {
+					$v.build($!output-buf, :index($k), :parent(self));
 				}
+			}
+
+			when StreamPosition {
+				# writing to the attribute here is intended
+				$attr.set_value(self, $!output-buf.bytes);
+			}
+
+			default {
+				die "Cannot write an attribute of type $_.gist() yet!";
 			}
 		}
 

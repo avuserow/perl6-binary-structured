@@ -151,6 +151,16 @@ method pull-elements(
 
 Helper method for reader methods to indicate a certain number of elements/iterations rather than a certain number of bytes.
 
+### method rewrite-attribute
+
+```
+method rewrite-attribute(
+    Str $attribute
+) returns Mu
+```
+
+Helper method to rewrite a previous attribute that is marked C<is rewritten>. Only works on seekable buffers and may not change the length of the buffer. Specify the attribute via string using the C<$!foo> syntax (regardless of if it is public or private).
+
 ### method parse
 
 ```
@@ -165,10 +175,7 @@ Takes a Buf of data to parse, with an optional position to start parsing at.
 ### method build
 
 ```
-method build(
-    Int :$index, 
-    Binary::Structured :$parent
-) returns Blob
+method build() returns Blob
 ```
 
 Construct a C<Buf> from the current state of this object.

@@ -1,19 +1,19 @@
-v0.0.2:
+Implemented for v0.0.2:
 - endianness
 --- little by default, big upon request
 - parent improvements for readers/writers
 --- convert to optional named parameter
+- `is rewritten` and `rewrite-attribute` for updating computed values
+- StreamPosition type
 
 Some time later:
-- position improvements
+- StreamEvent type for running code (e.g. for calling `rewrite-attribute`, debugging, or similar)
+- position ($!pos) improvements
 --- convert to optional named parameter for readers/writers
 --- returned from parse
 - encapsulation improvements for parse (one of the following)
 --- make parse a multi method so docs can hide primarily recursive parameters
 --- make parse have a private variant and have Binary::Structured trust itself and recursively call the private method
-- Anchor type for better position implementations (store current $!pos in variable)
-- Some sort of way to automatically update file positions
-- Some sort of way to update values in a second pass (think file positions, computed checksums, etc)
 - more endianness
 --- native endianness
 --- class-wide endianness
@@ -38,3 +38,6 @@ Some time later:
 --- contenders: custom code, Numeric::Pack, PackUnpack
 - add more typed exceptions
 - figure out how to subclass Blob/Buf properly for StaticData
+- need to rethink and standardize the useful parameters to readers, writers, defer-until and defer-triggers,
+- at some point, optimize and sanity check all attributes
+- somehow lock down $.pos, $.data, $.parent etc so they're only visible when parsing/building (maybe reset to defaults when done with parsing/building)
