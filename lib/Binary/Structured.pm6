@@ -47,6 +47,9 @@ These attributes are parsed in order of declaration, regardless of if they are
 public or private, but only attributes declared in that class directly. The
 readonly or rw traits are ignored for attributes. Methods are also ignored.
 
+WARNING: As this is a pre-1.0 module, the API is subject to change between
+versions without deprecation.
+
 =head1 TYPES
 
 Perl 6 provides a wealth of native sized types. The following native types may
@@ -99,6 +102,14 @@ current stream position into this attribute when reading or writing so other
 variables can reference it later. Reader and writer traits are ignored on this
 attribute.
 
+=item StreamEvent
+
+This exported class consumes no bytes, and writes no bytes. It executes the `is
+read` and `is written` attributes, allowing you to put arbitrary code in the
+parse or build process at this point. This is a good place to put a call to
+`rewrite-attribute`, allowing you to update a previous value once you know what
+it should be.
+
 =item Binary::Structured subclass
 
 These structures may be nested. Provide an attribute that subclasses
@@ -137,6 +148,7 @@ use experimental :pack;
 my enum Endianness <LITTLE BIG>;
 
 our class StreamPosition is Int {}
+our class StreamEvent {}
 
 my role ConstructedAttributeHelper {
 	has Routine $.reader is rw;
@@ -456,6 +468,10 @@ class Binary::Structured {
 					}
 				}
 
+				when StreamEvent {
+					$attr.reader.(self, :$index) if $attr.reader;
+				}
+
 				when StreamPosition {
 					# No need to set this rw
 					$attr.set_value(self, $!pos.clone);
@@ -517,7 +533,7 @@ class Binary::Structured {
 		return $output-buf;
 	}
 
-	method !build-attribute(Attribute $attr, Int :$index, Binary::Structured :$parent, Int :$position) returns Buf {
+	method !build-attribute(Attribute $attr, Int :$index, Binary::Structured :$parent) returns Buf {
 		my Buf $buf .= new;
 		my $endianness = LITTLE;
 		if $attr ~~ ConstructedAttributeHelper {
@@ -556,6 +572,14 @@ class Binary::Structured {
 				my $inner = self!get-attr-value($attr, :$index, :$parent);
 				for $inner.list.kv -> $k, $v {
 					$v.build($!output-buf, :index($k), :parent(self));
+				}
+			}
+
+			when StreamEvent {
+				# Ignore the output value
+				self!get-attr-value($attr, :$index, :$parent);
+				if $attr ~~ ConstructedAttributeHelper && $attr.writer {
+					$attr.writer.(self, :$index, :$parent, :position($!output-buf.bytes));
 				}
 			}
 

@@ -34,6 +34,8 @@ Types of the attributes are used whenever possible to drive behavior, with custo
 
 These attributes are parsed in order of declaration, regardless of if they are public or private, but only attributes declared in that class directly. The readonly or rw traits are ignored for attributes. Methods are also ignored.
 
+WARNING: As this is a pre-1.0 module, the API is subject to change between versions without deprecation.
+
 TYPES
 =====
 
@@ -71,6 +73,10 @@ A variant of Buf, `StaticData`, is provided to represent bytes that are known in
   * StreamPosition
 
 This exported class consumes no bytes, and writes no bytes. It just records the current stream position into this attribute when reading or writing so other variables can reference it later. Reader and writer traits are ignored on this attribute.
+
+  * StreamEvent
+
+This exported class consumes no bytes, and writes no bytes. It executes the `is read` and `is written` attributes, allowing you to put arbitrary code in the parse or build process at this point. This is a good place to put a call to `rewrite-attribute`, allowing you to update a previous value once you know what it should be.
 
   * Binary::Structured subclass
 
