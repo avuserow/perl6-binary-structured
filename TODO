@@ -1,13 +1,4 @@
-Implemented for v0.0.2:
-- endianness
---- little by default, big upon request
-- parent improvements for readers/writers
---- convert to optional named parameter
-- `is rewritten` and `rewrite-attribute` for updating computed values
-- StreamPosition type
-
 Some time later:
-- StreamEvent type for running code (e.g. for calling `rewrite-attribute`, debugging, or similar)
 - position ($!pos) improvements
 --- convert to optional named parameter for readers/writers
 --- returned from parse
