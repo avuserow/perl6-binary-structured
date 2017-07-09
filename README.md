@@ -20,7 +20,7 @@ SYNOPSIS
     say $parser.string.decode("ascii"); # "hello"
 
     # Writing
-    $parser.string = "some new data".ords;
+    $parser.string = Buf.new("some new data".ords);
     say $parser.build; # Buf.new<0d 6f 6d 65 20 6e 65 77 20 64 61 74 61>
 
 DESCRIPTION
