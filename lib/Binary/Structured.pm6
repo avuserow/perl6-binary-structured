@@ -1,4 +1,3 @@
-use v6;
 use v6.c;
 
 =begin pod
